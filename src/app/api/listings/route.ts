@@ -118,6 +118,36 @@ export async function POST(request: Request) {
     )
   }
 
+  const [profileResult, privateProfileResult] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .maybeSingle(),
+    supabase
+      .from('profile_private')
+      .select('phone')
+      .eq('id', user.id)
+      .maybeSingle(),
+  ])
+
+  if (profileResult.error || privateProfileResult.error) {
+    return NextResponse.json(
+      { error: 'Could not check your profile details' },
+      { status: 500 },
+    )
+  }
+
+  if (
+    !profileResult.data?.display_name?.trim() ||
+    !privateProfileResult.data?.phone?.trim()
+  ) {
+    return NextResponse.json(
+      { error: 'Add your display name and phone number to your profile before creating a listing' },
+      { status: 403 },
+    )
+  }
+
   let body: unknown
 
   try {
