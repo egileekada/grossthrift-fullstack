@@ -3,6 +3,7 @@ import {
   readDb,
   writeDb,
   getAuthenticatedUser,
+  createSession,
   toPublicUser,
 } from '@/lib/server/db';
 
@@ -121,6 +122,7 @@ export async function PATCH(request: Request) {
 
   db.users[userIdx] = user;
   writeDb(db);
+  createSession(user.id);
 
   return NextResponse.json({
     message: 'Profile updated.',

@@ -12,6 +12,7 @@ interface AppButtonProps
         ComponentProps<typeof Button>,
         | "children"
         | "onPress"
+        | "onClick"
         | "type"
         | "variant"
         | "size"
@@ -21,6 +22,7 @@ interface AppButtonProps
     > {
     children: ReactNode;
     onPress?: () => void;
+    onClick?: () => void;
     type?: "button" | "submit" | "reset";
     variant?: CustomVariants;
     size?: "sm" | "md" | "lg";
@@ -38,6 +40,7 @@ interface AppButtonProps
 export function AppButton({
     children,
     onPress,
+    onClick,
     type = "button",
     variant = "primary",
     size = "md",
@@ -49,7 +52,6 @@ export function AppButton({
     endContent,
     ...rest
 }: AppButtonProps) {
-    // ✅ Real HeroUI variants
     const heroVariants: string[] = [
         "solid",
         "bordered",
@@ -63,44 +65,42 @@ export function AppButton({
     const isHeroVariant = heroVariants.includes(variant as string);
     const isCustomPrimary = variant === "primary";
 
-    // ✅ Custom styles
     const customClasses = clsx({
-        "bg-primary-300 text-white transition-all duration-300 hover:bg-primary-250 hover:text-white":
+        "bg-charcoal text-white dark:text-[#141c17]":
             variant === "primary",
-        "border border-primary-300 bg-white text-primary-300 transition-all duration-300 ease-in-out hover:bg-grey-02 hover:border-primary-300 hover:text-primary-300 hover:bg-primary-100":
-            variant === "primary-outline",
-        "bg-secondary-350 text-neutral-500 transition-all duration-300 ease-in-out hover:bg-secondary-350  ":
+        "border border-border bg-white text-ink hover:bg-surface":
+            variant === "primary-outline" || variant === "outline",
+        "bg-surface text-ink border border-border":
             variant === "secondary-btn",
-        "border border-secondary-350 bg-white text-secondary-500 transition-all duration-300 ease-in-out hover:bg-secondary-50 ":
+        "border border-border bg-transparent text-slate hover:bg-surface":
             variant === "secondary-outline",
-        " bg-error-300 text-white transition-all duration-300 ease-in-out hover:bg-error-250  ":
+        "bg-error-300 text-white transition-all duration-300 hover:bg-error-250":
             variant === "error",
-        " bg-primary-150 text-neutral-500 transition-all duration-300 ease-in-out hover:bg-primary-100 ":
+        "bg-primary-150 text-neutral-500 transition-all duration-300 ease-in-out":
             variant === "disabled",
     });
 
     return (
         <Button
             type={type}
-            onPress={onPress}
+            onPress={onPress ?? onClick}
             isDisabled={disabled || loading}
-            variant={isHeroVariant ? (variant as HeroVariants) : "ghost"} // ✅ fallback
-            // size={size}
+            variant={isHeroVariant ? (variant as HeroVariants) : "ghost"}
             style={{
                 height:
-                    size === "lg" ? "60px" : size === "md" ? "52px" : "40px",
+                    size === "lg" ? "52px" : size === "md" ? "44px" : "38px",
             }}
             {...rest}
             className={clsx(
                 (isCustomPrimary || !isHeroVariant || variant === "outline") &&
-                    customClasses, // apply for custom variants
+                    customClasses,
                 fullWidth ? " w-full " : " w-fit ",
                 size === "lg"
-                    ? " h-[40px] lg:h-[60px] "
+                    ? " h-[44px] lg:h-[52px] "
                     : size === "md"
-                      ? " h-[40px] lg:h-[52px] "
-                      : " h-[40px] ",
-                " rounded-xl font-semibold text-sm ", // base styles
+                      ? " h-[40px] lg:h-[44px] "
+                      : " h-[38px] ",
+                " rounded-xl font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 ",
                 className,
             )}
         >
@@ -112,7 +112,7 @@ export function AppButton({
                 </>
             )}
             {loading && (
-                <p className=" text-sm font-semibold " >Loading...</p>
+                <p className="text-xs font-semibold">Loading...</p>
             )}
         </Button>
     );

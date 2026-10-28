@@ -20,6 +20,7 @@ interface Option {
 interface FormikFieldProps {
     name: string;
     label?: string;
+    labelRight?: ReactNode;
     placeholder?: string;
     type?: HTMLInputTypeAttribute;
     as?: "input" | "textarea" | "select";
@@ -46,6 +47,7 @@ interface FormikFieldProps {
 export function FormikField<T = unknown>({
     name,
     label,
+    labelRight,
     placeholder,
     type = "text",
     as = "input",
@@ -90,11 +92,16 @@ export function FormikField<T = unknown>({
     };
 
     return (
-        <div className={cn("w-full flex flex-col gap-1", className)}>
-            {label && (
-                <label className="text-sm font-medium text-black">
-                    {label}
-                </label>
+        <div className={cn("w-full flex flex-col gap-1.5", className)}>
+            {(label || labelRight) && (
+                <div className="flex items-center justify-between">
+                    {label && (
+                        <label className="text-xs font-medium text-ink">
+                            {label}
+                        </label>
+                    )}
+                    {labelRight}
+                </div>
             )}
 
             {/* INPUT */}
@@ -111,20 +118,20 @@ export function FormikField<T = unknown>({
                     startContent={prefix}
                     endContent={
                         loading ? (
-                            <span className="animate-spin text-black text-sm">
+                            <span className="animate-spin text-ink text-sm">
                                 ⏳
                             </span>
                         ) : isPassword ? (
                             <button
                                 type="button"
                                 aria-label={showPassword ? "Hide password" : "Show password"}
-                                className="flex items-center justify-center focus:outline-none"
+                                className="flex items-center justify-center focus:outline-none text-slate"
                                 onClick={() => setShowPassword((prev) => !prev)}
                             >
                                 {showPassword ? (
-                                    <EyeSlash size="20" />
+                                    <EyeSlash size="18" />
                                 ) : (
-                                    <Eye size="20" />
+                                    <Eye size="18" />
                                 )}
                             </button>
                         ) : (
@@ -134,9 +141,10 @@ export function FormikField<T = unknown>({
                     className={cn("w-full", inputClassName)}
                     classNames={{
                         inputWrapper: cn(
-                            "bg-white rounded-[8px] border border-neutral-150 h-[45px]",
+                            "bg-surface rounded-xl border border-border h-[45px] px-3.5 shadow-xs",
                             hasError && "border-red-500",
                         ),
+                        input: "text-xs text-ink placeholder:text-dust",
                     }}
                 />
             )}

@@ -123,15 +123,65 @@ export interface OnboardingProfileResponse {
   };
 }
 
+export interface PasswordResetPayload {
+  email: string;
+}
+
+export interface PasswordResetResponse {
+  message: string;
+  email: string;
+  resetToken: string;
+  resetUrl: string;
+}
+
+export interface UpdatePasswordPayload {
+  email?: string;
+  token?: string;
+  password: string;
+}
+
+export interface UpdatePasswordResponse {
+  message: string;
+  user?: User;
+}
+
+export interface PhoneOtpSendPayload {
+  phone: string;
+}
+
+export interface PhoneOtpVerifyPayload {
+  phone: string;
+  otp: string;
+}
+
 export const authApi = {
   login: (payload: LoginPayload) =>
     httpService.post<LoginResponse, LoginPayload>('/auth/login', payload),
+
+  sendPhoneOtp: (payload: PhoneOtpSendPayload) =>
+    httpService.post<LoginResponse, LoginPayload>('/auth/login', {
+      provider: 'phone',
+      phone: payload.phone,
+    }),
+
+  verifyPhoneOtp: (payload: PhoneOtpVerifyPayload) =>
+    httpService.post<LoginResponse, LoginPayload>('/auth/login', {
+      provider: 'phone',
+      phone: payload.phone,
+      otp: payload.otp,
+    }),
 
   signup: (payload: SignupPayload) =>
     httpService.post<SignupResponse, SignupPayload>('/auth/signup', payload),
 
   logout: () =>
     httpService.post<{ message: string }>('/auth/logout'),
+
+  requestPasswordReset: (payload: PasswordResetPayload) =>
+    httpService.post<PasswordResetResponse, PasswordResetPayload>('/auth/password-reset', payload),
+
+  updatePassword: (payload: UpdatePasswordPayload) =>
+    httpService.post<UpdatePasswordResponse, UpdatePasswordPayload>('/auth/update-password', payload),
 
   updateOnboardingProfile: (payload: OnboardingProfilePayload) =>
     httpService.patch<OnboardingProfileResponse, OnboardingProfilePayload>('/profile', payload),

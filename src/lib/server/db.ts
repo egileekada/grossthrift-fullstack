@@ -1,10 +1,27 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import { cookies } from 'next/headers';
-import { Listing, User, JoinRequest, AppNotification, Category, Currency, ServiceCatalogItem } from '@/types/listing';
+import {
+  Listing,
+  User,
+  JoinRequest,
+  AppNotification,
+  Category,
+  Currency,
+  ServiceCatalogItem,
+} from '@/types/listing';
 
 export const SESSION_COOKIE_NAME = 'gt_session';
+export const OTP_COOKIE_NAME = 'gt_otp';
+export const RESET_COOKIE_NAME = 'gt_pwd_reset';
+
+const SIGNING_SECRET =
+  process.env.AUTH_SECRET ||
+  process.env.NEXTAUTH_SECRET ||
+  process.env.SUPABASE_JWT_SECRET ||
+  'grossthrift-serverless-hmac-secret-key-2026';
 
 export interface StoredUser extends User {
   passwordHash: string;
@@ -24,6 +41,12 @@ export interface StoredOtp {
   expiresAt: string;
 }
 
+export interface StoredPasswordResetToken {
+  email: string;
+  token: string;
+  expiresAt: string;
+}
+
 export interface StoredJoinRequest extends JoinRequest {
   userId: string;
 }
@@ -36,10 +59,16 @@ export interface DatabaseSchema {
   users: StoredUser[];
   sessions: StoredSession[];
   otpCodes: StoredOtp[];
+  passwordResetTokens: StoredPasswordResetToken[];
   services: ServiceCatalogItem[];
   listings: Listing[];
   joinRequests: StoredJoinRequest[];
   notifications: StoredNotification[];
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __grossThriftDbCache: DatabaseSchema | undefined;
 }
 
 const DEFAULT_SERVICES: ServiceCatalogItem[] = [
@@ -115,52 +144,93 @@ const DEFAULT_SERVICES: ServiceCatalogItem[] = [
   },
 ];
 
-const DB_DIR = path.join(process.cwd(), '.data');
-const DB_FILE = path.join(DB_DIR, 'db.json');
+const LOCAL_DB_DIR = path.join(process.cwd(), '.data');
+const LOCAL_DB_FILE = path.join(LOCAL_DB_DIR, 'db.json');
+const TMP_DB_DIR = path.join(os.tmpdir(), 'grossthrift-data');
+const TMP_DB_FILE = path.join(TMP_DB_DIR, 'db.json');
+
+function createEmptyDb(): DatabaseSchema {
+  return {
+    users: [],
+    sessions: [],
+    otpCodes: [],
+    passwordResetTokens: [],
+    services: DEFAULT_SERVICES,
+    listings: [],
+    joinRequests: [],
+    notifications: [],
+  };
+}
+
+function normalizeParsedDb(parsed: Partial<DatabaseSchema>): DatabaseSchema {
+  return {
+    users: Array.isArray(parsed.users) ? parsed.users : [],
+    sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+    otpCodes: Array.isArray(parsed.otpCodes) ? parsed.otpCodes : [],
+    passwordResetTokens: Array.isArray(parsed.passwordResetTokens)
+      ? parsed.passwordResetTokens
+      : [],
+    services:
+      Array.isArray(parsed.services) && parsed.services.length > 0
+        ? parsed.services
+        : DEFAULT_SERVICES,
+    listings: Array.isArray(parsed.listings) ? parsed.listings : [],
+    joinRequests: Array.isArray(parsed.joinRequests) ? parsed.joinRequests : [],
+    notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
+  };
+}
+
+function resolveWritablePaths(): { dir: string; file: string } {
+  // On Vercel or serverless platforms, process.cwd() (/var/task) is read-only.
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return { dir: TMP_DB_DIR, file: TMP_DB_FILE };
+  }
+  try {
+    if (!fs.existsSync(LOCAL_DB_DIR)) {
+      fs.mkdirSync(LOCAL_DB_DIR, { recursive: true });
+    }
+    fs.accessSync(LOCAL_DB_DIR, fs.constants.W_OK);
+    return { dir: LOCAL_DB_DIR, file: LOCAL_DB_FILE };
+  } catch {
+    return { dir: TMP_DB_DIR, file: TMP_DB_FILE };
+  }
+}
 
 function ensureDbFile(): DatabaseSchema {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-  }
-
-  if (!fs.existsSync(DB_FILE)) {
-    const initialDb: DatabaseSchema = {
-      users: [],
-      sessions: [],
-      otpCodes: [],
-      services: DEFAULT_SERVICES,
-      listings: [],
-      joinRequests: [],
-      notifications: [],
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
-    return initialDb;
-  }
+  const { dir, file } = resolveWritablePaths();
 
   try {
-    const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<DatabaseSchema>;
-    return {
-      users: Array.isArray(parsed.users) ? parsed.users : [],
-      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-      otpCodes: Array.isArray(parsed.otpCodes) ? parsed.otpCodes : [],
-      services: Array.isArray(parsed.services) && parsed.services.length > 0 ? parsed.services : DEFAULT_SERVICES,
-      listings: Array.isArray(parsed.listings) ? parsed.listings : [],
-      joinRequests: Array.isArray(parsed.joinRequests) ? parsed.joinRequests : [],
-      notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
-    };
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    if (fs.existsSync(file)) {
+      const raw = fs.readFileSync(file, 'utf-8');
+      const parsed = JSON.parse(raw) as Partial<DatabaseSchema>;
+      const normalized = normalizeParsedDb(parsed);
+      globalThis.__grossThriftDbCache = normalized;
+      return normalized;
+    }
+
+    // Seed from read-only bundled .data/db.json if present
+    if (file !== LOCAL_DB_FILE && fs.existsSync(LOCAL_DB_FILE)) {
+      const seedRaw = fs.readFileSync(LOCAL_DB_FILE, 'utf-8');
+      const seedParsed = JSON.parse(seedRaw) as Partial<DatabaseSchema>;
+      const seeded = normalizeParsedDb(seedParsed);
+      fs.writeFileSync(file, JSON.stringify(seeded, null, 2), 'utf-8');
+      globalThis.__grossThriftDbCache = seeded;
+      return seeded;
+    }
+
+    const initialDb = globalThis.__grossThriftDbCache ?? createEmptyDb();
+    fs.writeFileSync(file, JSON.stringify(initialDb, null, 2), 'utf-8');
+    globalThis.__grossThriftDbCache = initialDb;
+    return initialDb;
   } catch {
-    const fallbackDb: DatabaseSchema = {
-      users: [],
-      sessions: [],
-      otpCodes: [],
-      services: DEFAULT_SERVICES,
-      listings: [],
-      joinRequests: [],
-      notifications: [],
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(fallbackDb, null, 2), 'utf-8');
-    return fallbackDb;
+    if (!globalThis.__grossThriftDbCache) {
+      globalThis.__grossThriftDbCache = createEmptyDb();
+    }
+    return globalThis.__grossThriftDbCache;
   }
 }
 
@@ -169,10 +239,16 @@ export function readDb(): DatabaseSchema {
 }
 
 export function writeDb(db: DatabaseSchema): void {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
+  globalThis.__grossThriftDbCache = db;
+  const { dir, file } = resolveWritablePaths();
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(file, JSON.stringify(db, null, 2), 'utf-8');
+  } catch {
+    // Fallback to in-memory cache when filesystem write is restricted
   }
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
 }
 
 export function hashPassword(password: string): string {
@@ -182,10 +258,14 @@ export function hashPassword(password: string): string {
 }
 
 export function verifyPassword(password: string, storedHash: string): boolean {
-  const [salt, originalHash] = storedHash.split(':');
-  if (!salt || !originalHash) return false;
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex'));
+  try {
+    const [salt, originalHash] = storedHash.split(':');
+    if (!salt || !originalHash) return false;
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(originalHash, 'hex'));
+  } catch {
+    return false;
+  }
 }
 
 export function toPublicUser(user: StoredUser): User {
@@ -194,9 +274,46 @@ export function toPublicUser(user: StoredUser): User {
   return publicUser;
 }
 
+function signPayload<T>(payload: T): string {
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', SIGNING_SECRET)
+    .update(encoded)
+    .digest('base64url');
+  return `${encoded}.${sig}`;
+}
+
+function verifySignedPayload<T>(signed: string): T | null {
+  try {
+    const parts = signed.split('.');
+    if (parts.length !== 2) return null;
+    const [encoded, sig] = parts;
+    const expectedSig = crypto
+      .createHmac('sha256', SIGNING_SECRET)
+      .update(encoded)
+      .digest('base64url');
+    if (
+      sig.length !== expectedSig.length ||
+      !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
+    ) {
+      return null;
+    }
+    const json = Buffer.from(encoded, 'base64url').toString('utf-8');
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
+}
+
+interface SignedSessionPayload {
+  token: string;
+  user: StoredUser;
+  expiresAt: string;
+}
+
 export function createSession(userId: string): string {
   const db = readDb();
-  const token = crypto.randomBytes(32).toString('hex');
+  const rawToken = crypto.randomBytes(24).toString('hex');
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
@@ -205,7 +322,7 @@ export function createSession(userId: string): string {
   );
 
   db.sessions.push({
-    token,
+    token: rawToken,
     userId,
     createdAt: now.toISOString(),
     expiresAt: expiresAt.toISOString(),
@@ -213,28 +330,40 @@ export function createSession(userId: string): string {
 
   writeDb(db);
 
+  const user = db.users.find((u) => u.id === userId);
+  const cookieValue = user
+    ? signPayload<SignedSessionPayload>({
+        token: rawToken,
+        user,
+        expiresAt: expiresAt.toISOString(),
+      })
+    : rawToken;
+
   try {
     const cookieStore = cookies();
-    cookieStore.set(SESSION_COOKIE_NAME, token, {
+    cookieStore.set(SESSION_COOKIE_NAME, cookieValue, {
       httpOnly: true,
       path: '/',
       sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
       expires: expiresAt,
     });
   } catch {
     // Ignore if called outside request context
   }
 
-  return token;
+  return cookieValue;
 }
 
 export function clearSession(): void {
   try {
     const cookieStore = cookies();
-    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    if (token) {
+    const rawCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    if (rawCookie) {
+      const signed = verifySignedPayload<SignedSessionPayload>(rawCookie);
+      const tokenToClear = signed ? signed.token : rawCookie;
       const db = readDb();
-      db.sessions = db.sessions.filter((s) => s.token !== token);
+      db.sessions = db.sessions.filter((s) => s.token !== tokenToClear);
       writeDb(db);
     }
     cookieStore.delete(SESSION_COOKIE_NAME);
@@ -246,13 +375,31 @@ export function clearSession(): void {
 export function getAuthenticatedUser(): StoredUser | null {
   try {
     const cookieStore = cookies();
-    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    if (!token) return null;
+    const rawCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    if (!rawCookie) return null;
 
     const db = readDb();
     const now = Date.now();
+
+    // 1. Check signed stateless session token (works across serverless instances on Vercel)
+    const signed = verifySignedPayload<SignedSessionPayload>(rawCookie);
+    if (signed && new Date(signed.expiresAt).getTime() > now && signed.user?.id) {
+      let existingUser = db.users.find(
+        (u) =>
+          u.id === signed.user.id ||
+          u.email.toLowerCase() === signed.user.email.toLowerCase()
+      );
+      if (!existingUser) {
+        existingUser = signed.user;
+        db.users.push(existingUser);
+        writeDb(db);
+      }
+      return existingUser;
+    }
+
+    // 2. Fallback to plain token lookup in db.sessions
     const session = db.sessions.find(
-      (s) => s.token === token && new Date(s.expiresAt).getTime() > now
+      (s) => s.token === rawCookie && new Date(s.expiresAt).getTime() > now
     );
     if (!session) return null;
 
@@ -261,6 +408,135 @@ export function getAuthenticatedUser(): StoredUser | null {
   } catch {
     return null;
   }
+}
+
+export function saveOtpChallenge(phone: string, code: string, expiresAt: string): void {
+  const db = readDb();
+  db.otpCodes = db.otpCodes.filter((item) => item.phone !== phone);
+  db.otpCodes.push({ phone, code, expiresAt });
+  writeDb(db);
+
+  try {
+    const cookieStore = cookies();
+    cookieStore.set(OTP_COOKIE_NAME, signPayload<StoredOtp>({ phone, code, expiresAt }), {
+      httpOnly: true,
+      path: '/',
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      expires: new Date(expiresAt),
+    });
+  } catch {
+    // Ignore outside request context
+  }
+}
+
+export function verifyOtpChallenge(phone: string, code: string): boolean {
+  const db = readDb();
+  const now = Date.now();
+  const storedOtp = db.otpCodes.find(
+    (item) => item.phone === phone && new Date(item.expiresAt).getTime() > now
+  );
+  if (storedOtp && storedOtp.code === code) {
+    db.otpCodes = db.otpCodes.filter((item) => item.phone !== phone);
+    writeDb(db);
+    return true;
+  }
+
+  try {
+    const cookieStore = cookies();
+    const raw = cookieStore.get(OTP_COOKIE_NAME)?.value;
+    if (raw) {
+      const signed = verifySignedPayload<StoredOtp>(raw);
+      if (
+        signed &&
+        signed.phone === phone &&
+        signed.code === code &&
+        new Date(signed.expiresAt).getTime() > now
+      ) {
+        cookieStore.delete(OTP_COOKIE_NAME);
+        return true;
+      }
+    }
+  } catch {
+    // Ignore
+  }
+
+  return false;
+}
+
+export function savePasswordResetChallenge(
+  email: string,
+  token: string,
+  expiresAt: string
+): void {
+  const db = readDb();
+  db.passwordResetTokens = db.passwordResetTokens.filter(
+    (item) => item.email.toLowerCase() !== email.toLowerCase()
+  );
+  db.passwordResetTokens.push({ email: email.toLowerCase(), token, expiresAt });
+  writeDb(db);
+
+  try {
+    const cookieStore = cookies();
+    cookieStore.set(
+      RESET_COOKIE_NAME,
+      signPayload<StoredPasswordResetToken>({
+        email: email.toLowerCase(),
+        token,
+        expiresAt,
+      }),
+      {
+        httpOnly: true,
+        path: '/',
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        expires: new Date(expiresAt),
+      }
+    );
+  } catch {
+    // Ignore
+  }
+}
+
+export function verifyPasswordResetChallenge(email: string, token: string): boolean {
+  const db = readDb();
+  const now = Date.now();
+  const normalizedEmail = email.toLowerCase();
+
+  const storedReset = db.passwordResetTokens.find(
+    (item) =>
+      item.email.toLowerCase() === normalizedEmail &&
+      new Date(item.expiresAt).getTime() > now
+  );
+
+  if (storedReset && storedReset.token === token) {
+    db.passwordResetTokens = db.passwordResetTokens.filter(
+      (item) => item.email.toLowerCase() !== normalizedEmail
+    );
+    writeDb(db);
+    return true;
+  }
+
+  try {
+    const cookieStore = cookies();
+    const raw = cookieStore.get(RESET_COOKIE_NAME)?.value;
+    if (raw) {
+      const signed = verifySignedPayload<StoredPasswordResetToken>(raw);
+      if (
+        signed &&
+        signed.email.toLowerCase() === normalizedEmail &&
+        signed.token === token &&
+        new Date(signed.expiresAt).getTime() > now
+      ) {
+        cookieStore.delete(RESET_COOKIE_NAME);
+        return true;
+      }
+    }
+  } catch {
+    // Ignore
+  }
+
+  return false;
 }
 
 export function isSupabaseConfigured(): boolean {

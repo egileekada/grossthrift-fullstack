@@ -80,6 +80,15 @@ export default function LoginPage() {
                   isPassword
                 />
 
+                <div className="flex items-center justify-end -mt-1">
+                  <Link
+                    href="/auth/forgot-password"
+                    className="text-xs font-semibold text-sage hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+
                 <div className="pt-2">
                   <button
                     type="submit"
