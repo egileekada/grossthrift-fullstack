@@ -10,15 +10,14 @@ import {
 import { Listing } from '@/types/listing';
 
 export async function GET(request: Request) {
-  const params = new URL(request.url).searchParams
-  const page = Number(params.get('page') ?? '1')
-  const pageSize = Number(params.get('pageSize') ?? '20')
-  const category = params.get('category')?.trim()
-  const search = params.get('search')?.trim()
-  const hostType = params.get('hostType') ?? 'all'
-  const sort = params.get('sort') ?? 'newest'
-  const minPrice = params.has('minPrice') ? Number(params.get('minPrice')) : undefined
-  const maxPrice = params.has('maxPrice') ? Number(params.get('maxPrice')) : undefined
+  const params = new URL(request.url).searchParams;
+  const page = Number(params.get('page') ?? '1');
+  const pageSize = Number(params.get('pageSize') ?? '50');
+  const category = params.get('category')?.trim();
+  const search = params.get('search')?.trim();
+  const sort = params.get('sort') ?? 'newest';
+  const minPrice = params.has('minPrice') ? Number(params.get('minPrice')) : undefined;
+  const maxPrice = params.has('maxPrice') ? Number(params.get('maxPrice')) : undefined;
 
   if (
     !Number.isInteger(page) ||
@@ -114,6 +113,7 @@ export async function GET(request: Request) {
     },
   });
 }
+
 export async function POST(request: Request) {
   const authUser = getAuthenticatedUser();
 
@@ -241,4 +241,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ data: newListing }, { status: 201 });
 }
-
