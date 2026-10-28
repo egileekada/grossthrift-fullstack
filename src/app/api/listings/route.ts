@@ -101,35 +101,6 @@ export async function GET(request: Request) {
     ? db.notifications.filter((n) => n.userId === authUser.id)
     : [];
 
-  const listings = (data ?? []).map((row) => ({
-    id: row.id,
-    host_type: row.host_type === 'official' ? 'official' : 'community',
-    service_id: row.service_id,
-    plan_type: row.plan_type,
-    total_cost: row.total_cost,
-    billing_cycle: row.billing_cycle,
-    seats_total: row.seats_total,
-    seats_open: row.seats_open,
-    price_per_seat: row.price_per_seat,
-    description: row.description,
-    rules: row.rules,
-    status: row.status,
-    created_at: row.created_at,
-    service: {
-      name: row.service_name,
-      category: row.service_category,
-      logo_url: row.service_logo_url,
-      sharing_policy_note: row.sharing_policy_note,
-    },
-    host: {
-      display_name: row.host_display_name,
-      avatar_url: row.host_avatar_url,
-      rating_avg: row.host_rating_avg,
-      completed_splits: row.host_completed_splits,
-      is_official: row.host_type === 'official',
-    },
-  }))
-
   return NextResponse.json({
     data: paginated,
     joinedListingIds,
