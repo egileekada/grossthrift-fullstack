@@ -1,0 +1,129 @@
+{
+  "users": [
+    {
+      "id": "8d3451bc-ede7-4cb2-9007-78576aff2316",
+      "name": "Ekada Egileonisofien",
+      "email": "egileoniso.ekada@gmail.com",
+      "avatar": "https://api.dicebear.com/7.x/initials/svg?seed=Ekada%20Egileonisofien",
+      "isVerified": true,
+      "memberSince": "Oct 2026",
+      "successfulSplits": 1,
+      "country": "Nigeria",
+      "countryFlag": "🇳🇬",
+      "isVetted": true,
+      "passwordHash": "be584d42fd9dc9923890c61785a68967:2cbfb9287a657825f3f45140252fd8a87c995543a76eb1793f7f3e769f6703acfb852d8adba4c307ad4d60acc2f5c7d83afa24d1bad2d8999c50288979fc0b44",
+      "createdAt": "2026-10-28T15:39:19.498Z",
+      "verificationMethod": "linkedin",
+      "verificationDetail": "https://linkedin.com/in/dax"
+    }
+  ],
+  "sessions": [
+    {
+      "token": "49363e66a3999dd181097e3888b34eb1bba5dcd4065fae017172f0654f8c2626",
+      "userId": "8d3451bc-ede7-4cb2-9007-78576aff2316",
+      "createdAt": "2026-10-28T15:39:19.536Z",
+      "expiresAt": "2026-11-27T15:39:19.536Z"
+    }
+  ],
+  "otpCodes": [],
+  "services": [
+    {
+      "id": "srv-youtube-premium",
+      "name": "YouTube Premium",
+      "category": "Streaming",
+      "logo_url": null,
+      "sharing_policy_note": "Up to 5 family members in the same household region."
+    },
+    {
+      "id": "srv-spotify-family",
+      "name": "Spotify Family",
+      "category": "Streaming",
+      "logo_url": null,
+      "sharing_policy_note": "Up to 6 Premium accounts for family members."
+    },
+    {
+      "id": "srv-netflix-4k",
+      "name": "Netflix Premium 4K",
+      "category": "Streaming",
+      "logo_url": null,
+      "sharing_policy_note": "4 simultaneous Ultra HD streams with isolated profiles."
+    },
+    {
+      "id": "srv-chatgpt-team",
+      "name": "ChatGPT Plus Team",
+      "category": "AI Tools",
+      "logo_url": null,
+      "sharing_policy_note": "Isolated workspace seats with GPT-4o access."
+    },
+    {
+      "id": "srv-adobe-cc",
+      "name": "Adobe Creative Cloud",
+      "category": "Productivity",
+      "logo_url": null,
+      "sharing_policy_note": "Multi-seat team license for Creative Cloud apps."
+    },
+    {
+      "id": "srv-ms365-family",
+      "name": "Microsoft 365 Family",
+      "category": "Productivity",
+      "logo_url": null,
+      "sharing_policy_note": "Up to 6 users with 1TB OneDrive cloud storage each."
+    },
+    {
+      "id": "srv-apple-one",
+      "name": "Apple One Premier",
+      "category": "Storage",
+      "logo_url": null,
+      "sharing_policy_note": "Up to 6 family members via Apple Family Sharing."
+    },
+    {
+      "id": "srv-canva-pro",
+      "name": "Canva Pro",
+      "category": "Productivity",
+      "logo_url": null,
+      "sharing_policy_note": "Shared team brand kit and premium templates."
+    },
+    {
+      "id": "srv-nordvpn",
+      "name": "NordVPN",
+      "category": "Security",
+      "logo_url": null,
+      "sharing_policy_note": "Up to 10 simultaneous device connections."
+    },
+    {
+      "id": "srv-notion-plus",
+      "name": "Notion Plus",
+      "category": "Productivity",
+      "logo_url": null,
+      "sharing_policy_note": "Collaborative workspace seats."
+    }
+  ],
+  "listings": [
+    {
+      "id": "596d283a-6aef-48d2-9a7f-c6c2da347bb2",
+      "planName": "Spotify Family",
+      "category": "Streaming",
+      "totalCost": 16.99,
+      "slotsTotal": 5,
+      "slotsFilled": 1,
+      "currency": "USD",
+      "description": "testing",
+      "contactMethod": "WhatsApp",
+      "contactValue": "+2347030697459",
+      "logoEmoji": "🎵",
+      "hostId": "8d3451bc-ede7-4cb2-9007-78576aff2316",
+      "hostName": "Ekada Egileonisofien",
+      "hostAvatar": "https://api.dicebear.com/7.x/initials/svg?seed=Ekada%20Egileonisofien",
+      "hostVerified": true,
+      "hostJoined": "Oct 2026",
+      "hostSuccessfulSplits": 1,
+      "createdAt": "2026-10-28T15:40:33.090Z",
+      "country": "Nigeria",
+      "countryFlag": "🇳🇬",
+      "rules": "Respect your assigned profile slot and keep monthly renewals on time.",
+      "billingCycle": "monthly"
+    }
+  ],
+  "joinRequests": [],
+  "notifications": []
+}

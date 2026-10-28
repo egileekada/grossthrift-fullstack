@@ -1,246 +1,243 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+import {
+  readDb,
+  writeDb,
+  getAuthenticatedUser,
+  normalizeCategory,
+  normalizeCurrency,
+} from '@/lib/server/db';
+import { Listing } from '@/types/listing';
 
 export async function GET(request: Request) {
-  const params = new URL(request.url).searchParams
-  const page = Number(params.get('page') ?? '1')
-  const pageSize = Number(params.get('pageSize') ?? '20')
-  const category = params.get('category')?.trim()
-  const search = params.get('search')?.trim()
-  const sort = params.get('sort') ?? 'newest'
-  const minPrice = params.has('minPrice') ? Number(params.get('minPrice')) : undefined
-  const maxPrice = params.has('maxPrice') ? Number(params.get('maxPrice')) : undefined
+  const params = new URL(request.url).searchParams;
+  const page = Number(params.get('page') ?? '1');
+  const pageSize = Number(params.get('pageSize') ?? '50');
+  const category = params.get('category')?.trim();
+  const search = params.get('search')?.trim();
+  const sort = params.get('sort') ?? 'newest';
+  const minPrice = params.has('minPrice') ? Number(params.get('minPrice')) : undefined;
+  const maxPrice = params.has('maxPrice') ? Number(params.get('maxPrice')) : undefined;
 
   if (
     !Number.isInteger(page) ||
     page < 1 ||
     !Number.isInteger(pageSize) ||
     pageSize < 1 ||
-    pageSize > 50 ||
-    !['newest', 'price_asc', 'price_desc'].includes(sort) ||
-    (minPrice !== undefined && (!Number.isFinite(minPrice) || minPrice < 0)) ||
-    (maxPrice !== undefined && (!Number.isFinite(maxPrice) || maxPrice < 0)) ||
-    (minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice) ||
-    (category && category.length > 100) ||
-    (search && search.length > 100)
+    pageSize > 100
   ) {
     return NextResponse.json(
-      { error: 'Invalid listing filters or pagination values' },
-      { status: 400 },
-    )
+      { error: 'Invalid listing pagination values.' },
+      { status: 400 }
+    );
   }
 
-  const supabase = createClient()
-  const from = (page - 1) * pageSize
+  const db = readDb();
+  const authUser = getAuthenticatedUser();
 
-  let query = supabase
-    .from('listings')
-    .select(
-      `
-        id,
-        host_type,
-        service_id,
-        plan_type,
-        total_cost,
-        billing_cycle,
-        seats_total,
-        seats_open,
-        price_per_seat,
-        description,
-        rules,
-        created_at,
-        services!inner (
-          name,
-          category,
-          logo_url,
-          sharing_policy_note
-        )
-      `,
-      { count: 'exact' },
-    )
-    .eq('visibility', 'public')
-    .eq('status', 'active')
+  let filtered = [...db.listings];
 
-  if (category) query = query.eq('services.category', category)
-  if (search) query = query.ilike('services.name', `%${search}%`)
-  if (minPrice !== undefined) query = query.gte('price_per_seat', minPrice)
-  if (maxPrice !== undefined) query = query.lte('price_per_seat', maxPrice)
+  if (category && category !== 'All') {
+    filtered = filtered.filter((l) => l.category.toLowerCase() === category.toLowerCase());
+  }
+
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(
+      (l) =>
+        l.planName.toLowerCase().includes(q) ||
+        l.category.toLowerCase().includes(q) ||
+        l.description.toLowerCase().includes(q) ||
+        l.hostName.toLowerCase().includes(q)
+    );
+  }
+
+  if (minPrice !== undefined && Number.isFinite(minPrice)) {
+    filtered = filtered.filter((l) => l.totalCost / l.slotsTotal >= minPrice);
+  }
+
+  if (maxPrice !== undefined && Number.isFinite(maxPrice)) {
+    filtered = filtered.filter((l) => l.totalCost / l.slotsTotal <= maxPrice);
+  }
 
   if (sort === 'price_asc') {
-    query = query.order('price_per_seat', { ascending: true })
+    filtered.sort((a, b) => a.totalCost / a.slotsTotal - b.totalCost / b.slotsTotal);
   } else if (sort === 'price_desc') {
-    query = query.order('price_per_seat', { ascending: false })
+    filtered.sort((a, b) => b.totalCost / b.slotsTotal - a.totalCost / a.slotsTotal);
   } else {
-    query = query.order('created_at', { ascending: false })
+    filtered.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }
 
-  const { data, error, count } = await query.range(
-    from,
-    from + pageSize - 1,
-  )
+  const total = filtered.length;
+  const from = (page - 1) * pageSize;
+  const paginated = filtered.slice(from, from + pageSize);
 
-  if (error) {
-    console.error('GET /api/listings failed:', error.message)
-    return NextResponse.json(
-      { error: 'Unable to load listings' },
-      { status: 500 },
-    )
-  }
+  // Include current user's joinedListingIds, joinRequests, and notifications if signed in
+  const hostedListingIds = authUser
+    ? db.listings.filter((l) => l.hostId === authUser.id).map((l) => l.id)
+    : [];
+
+  const userJoinRequests = authUser
+    ? db.joinRequests.filter(
+        (r) => r.userId === authUser.id || hostedListingIds.includes(r.listingId)
+      )
+    : [];
+
+  const joinedListingIds = authUser
+    ? Array.from(
+        new Set([
+          ...hostedListingIds,
+          ...db.joinRequests
+            .filter((r) => r.userId === authUser.id && r.status !== 'rejected')
+            .map((r) => r.listingId),
+        ])
+      )
+    : [];
+
+  const userNotifications = authUser
+    ? db.notifications.filter((n) => n.userId === authUser.id)
+    : [];
 
   return NextResponse.json({
-    data,
+    data: paginated,
+    joinedListingIds,
+    joinRequests: userJoinRequests,
+    notifications: userNotifications,
     pagination: {
       page,
       pageSize,
-      total: count ?? 0,
-      totalPages: Math.ceil((count ?? 0) / pageSize),
+      total,
+      totalPages: Math.ceil(total / pageSize),
     },
-  })
+  });
 }
 
-
 export async function POST(request: Request) {
-  const supabase = createClient()
+  const authUser = getAuthenticatedUser();
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Sign in first' }, { status: 401 })
-  }
-
-  if (!user.email_confirmed_at) {
+  if (!authUser) {
     return NextResponse.json(
-      { error: 'Verify your email before creating a listing' },
-      { status: 403 },
-    )
+      { error: 'Please sign in before creating a listing.' },
+      { status: 401 }
+    );
   }
 
-  const [profileResult, privateProfileResult] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('display_name')
-      .eq('id', user.id)
-      .maybeSingle(),
-    supabase
-      .from('profile_private')
-      .select('phone')
-      .eq('id', user.id)
-      .maybeSingle(),
-  ])
-
-  if (profileResult.error || privateProfileResult.error) {
-    return NextResponse.json(
-      { error: 'Could not check your profile details' },
-      { status: 500 },
-    )
-  }
-
-  if (
-    !profileResult.data?.display_name?.trim() ||
-    !privateProfileResult.data?.phone?.trim()
-  ) {
-    return NextResponse.json(
-      { error: 'Add your display name and phone number to your profile before creating a listing' },
-      { status: 403 },
-    )
-  }
-
-  let body: unknown
-
+  let body: unknown;
   try {
-    body = await request.json()
+    body = await request.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
   }
 
   if (typeof body !== 'object' || body === null) {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
   }
 
-  const input = body as Record<string, unknown>
-  const serviceId = input.service_id
-  const planType = input.plan_type
-  const billingCycle = input.billing_cycle
-  const totalCost = input.total_cost
-  const seatsTotal = input.seats_total
-  const pricePerSeat = input.price_per_seat
-  const description = input.description
-  const rules = input.rules
-  const visibility = input.visibility
+  const input = body as Record<string, unknown>;
+  const planName =
+    typeof input.planName === 'string' && input.planName.trim()
+      ? input.planName.trim()
+      : typeof input.plan_type === 'string' && input.plan_type.trim()
+        ? input.plan_type.trim()
+        : '';
 
-  if (
-    typeof serviceId !== 'string' ||
-    typeof planType !== 'string' ||
-    !planType.trim() ||
-    typeof billingCycle !== 'string' ||
-    !billingCycle.trim() ||
-    typeof totalCost !== 'number' ||
-    !Number.isFinite(totalCost) ||
-    totalCost <= 0 ||
-    typeof seatsTotal !== 'number' ||
-    !Number.isInteger(seatsTotal) ||
-    seatsTotal < 1 ||
-    typeof pricePerSeat !== 'number' ||
-    !Number.isFinite(pricePerSeat) ||
-    pricePerSeat <= 0 ||
-    typeof rules !== 'string' ||
-    !rules.trim() ||
-    !['private', 'public'].includes(String(visibility)) ||
-    input.host_attested !== true ||
-    (description !== undefined && typeof description !== 'string')
-  ) {
+  const totalCost = Number(input.totalCost ?? input.total_cost ?? 0);
+  const slotsTotal = Number(input.slotsTotal ?? input.seats_total ?? 0);
+  const category = normalizeCategory(
+    typeof input.category === 'string' ? input.category : undefined
+  );
+  const currency = normalizeCurrency(
+    typeof input.currency === 'string' ? input.currency : undefined
+  );
+  const description =
+    typeof input.description === 'string' && input.description.trim()
+      ? input.description.trim()
+      : `Shared co-buying group for ${planName} hosted by ${authUser.name}.`;
+  const contactMethod =
+    input.contactMethod === 'Email' ? 'Email' : 'WhatsApp';
+  const contactValue =
+    typeof input.contactValue === 'string' && input.contactValue.trim()
+      ? input.contactValue.trim()
+      : authUser.phone || authUser.email;
+  const logoEmoji =
+    typeof input.logoEmoji === 'string' ? input.logoEmoji : undefined;
+  const rules =
+    typeof input.rules === 'string' && input.rules.trim()
+      ? input.rules.trim()
+      : 'Respect your assigned profile slot and keep monthly renewals on time.';
+  const billingCycle =
+    typeof input.billingCycle === 'string'
+      ? input.billingCycle
+      : typeof input.billing_cycle === 'string'
+        ? input.billing_cycle
+        : 'monthly';
+  const serviceId =
+    typeof input.serviceId === 'string'
+      ? input.serviceId
+      : typeof input.service_id === 'string'
+        ? input.service_id
+        : undefined;
+
+  if (!planName) {
     return NextResponse.json(
-      { error: 'Listing details are missing or invalid' },
-      { status: 400 },
-    )
+      { error: 'Please provide a subscription plan name.' },
+      { status: 400 }
+    );
   }
 
-  const { data: service, error: serviceError } = await supabase
-    .from('services')
-    .select('id')
-    .eq('id', serviceId)
-    .eq('is_active', true)
-    .maybeSingle()
-
-  if (serviceError || !service) {
+  if (!Number.isFinite(totalCost) || totalCost <= 0) {
     return NextResponse.json(
-      { error: 'Choose an active service from the catalog' },
-      { status: 400 },
-    )
+      { error: 'Total cost must be greater than 0.' },
+      { status: 400 }
+    );
   }
 
-  const { data: listing, error } = await supabase
-    .from('listings')
-    .insert({
-      host_type: 'user',
-      host_id: user.id,
-      service_id: serviceId,
-      plan_type: planType.trim(),
-      total_cost: totalCost,
-      billing_cycle: billingCycle.trim(),
-      seats_total: seatsTotal,
-      seats_open: seatsTotal,
-      price_per_seat: pricePerSeat,
-      description:
-        typeof description === 'string' ? description.trim() || null : null,
-      rules: rules.trim(),
-      status: 'active',
-      visibility,
-      host_attested: true,
-    })
-    .select('id, service_id, plan_type, price_per_seat, seats_open, status, visibility')
-    .single()
-
-  if (error) {
-    console.error('POST /api/listings failed:', error.message)
+  if (!Number.isInteger(slotsTotal) || slotsTotal < 2 || slotsTotal > 20) {
     return NextResponse.json(
-      { error: 'Unable to create listing' },
-      { status: 500 },
-    )
+      { error: 'Number of people splitting must be between 2 and 20.' },
+      { status: 400 }
+    );
   }
 
-  return NextResponse.json({ data: listing }, { status: 201 })
+  const db = readDb();
+  const now = new Date().toISOString();
+
+  const newListing: Listing = {
+    id: crypto.randomUUID(),
+    planName,
+    category,
+    totalCost,
+    slotsTotal,
+    slotsFilled: 1,
+    currency,
+    description,
+    contactMethod,
+    contactValue,
+    logoEmoji,
+    hostId: authUser.id,
+    hostName: authUser.name,
+    hostAvatar: authUser.avatar,
+    hostVerified: Boolean(authUser.isVerified),
+    hostJoined: authUser.memberSince || 'Oct 2026',
+    hostSuccessfulSplits: (authUser.successfulSplits || 0) + 1,
+    createdAt: now,
+    country: authUser.country || 'United States',
+    countryFlag: authUser.countryFlag || '🇺🇸',
+    rules,
+    billingCycle,
+    serviceId,
+  };
+
+  db.listings.unshift(newListing);
+
+  const userIdx = db.users.findIndex((u) => u.id === authUser.id);
+  if (userIdx !== -1) {
+    db.users[userIdx].successfulSplits = (db.users[userIdx].successfulSplits || 0) + 1;
+  }
+
+  writeDb(db);
+
+  return NextResponse.json({ data: newListing }, { status: 201 });
 }

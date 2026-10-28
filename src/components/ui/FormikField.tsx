@@ -1,0 +1,237 @@
+"use client";
+
+import { useField, useFormikContext, getIn } from "formik";
+import {
+    Input,
+    Textarea,
+    Select,
+    SelectItem,
+} from "@heroui/react";
+import { HTMLInputTypeAttribute, ReactNode, useState } from "react";
+import { Danger, Eye, EyeSlash, InfoCircle } from "iconsax-reactjs";
+import { AnimatePresence, motion } from "framer-motion";
+import { cn } from "@/lib/utils";
+
+interface Option {
+    label: string;
+    value: string;
+}
+
+interface FormikFieldProps {
+    name: string;
+    label?: string;
+    placeholder?: string;
+    type?: HTMLInputTypeAttribute;
+    as?: "input" | "textarea" | "select";
+    options?: Option[];
+    info?: string;
+
+    multiple?: boolean;
+
+    prefix?: ReactNode;
+    suffix?: ReactNode;
+    disabled?: boolean;
+    loading?: boolean;
+    className?: string;
+    inputClassName?: string;
+    isPassword?: boolean;
+
+    selectClassName?: string;
+    selectTriggerClassName?: string;
+    selectPopoverClassName?: string;
+    selectIndicatorClassName?: string;
+    isTouched?: boolean;
+}
+
+export function FormikField<T = unknown>({
+    name,
+    label,
+    placeholder,
+    type = "text",
+    as = "input",
+    options = [],
+    prefix,
+    suffix,
+    disabled = false,
+    loading = false,
+    className,
+    inputClassName,
+    isPassword,
+    selectClassName,
+    selectTriggerClassName,
+    selectPopoverClassName,
+    selectIndicatorClassName,
+    info,
+    multiple,
+    isTouched,
+}: FormikFieldProps) {
+    const [showPassword, setShowPassword] = useState(false);
+
+    const [field] = useField<T>(name);
+
+    const { errors, touched, setFieldValue, setFieldTouched } =
+        useFormikContext<Record<string, unknown>>();
+
+    const fieldError = getIn(errors, name) as string | undefined;
+    const fieldTouched = getIn(touched, name) as boolean | undefined;
+
+    const hasError = Boolean((fieldTouched || isTouched) && fieldError);
+
+    const inputType = isPassword ? (showPassword ? "text" : "password") : type;
+    const inputValue = field.value ?? "";
+    const accessibleLabel = label || placeholder || name;
+
+    const handleChange = async (val: unknown) => {
+        await setFieldValue(name, val, true);
+    };
+
+    const handleBlur = async () => {
+        await setFieldTouched(name, true, true);
+    };
+
+    return (
+        <div className={cn("w-full flex flex-col gap-1", className)}>
+            {label && (
+                <label className="text-sm font-medium text-black">
+                    {label}
+                </label>
+            )}
+
+            {/* INPUT */}
+            {as === "input" && (
+                <Input
+                    name={name}
+                    aria-label={accessibleLabel}
+                    type={inputType}
+                    placeholder={placeholder}
+                    value={String(inputValue)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange(e.target.value)}
+                    onBlur={handleBlur}
+                    isDisabled={disabled || loading}
+                    startContent={prefix}
+                    endContent={
+                        loading ? (
+                            <span className="animate-spin text-black text-sm">
+                                ⏳
+                            </span>
+                        ) : isPassword ? (
+                            <button
+                                type="button"
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                                className="flex items-center justify-center focus:outline-none"
+                                onClick={() => setShowPassword((prev) => !prev)}
+                            >
+                                {showPassword ? (
+                                    <EyeSlash size="20" />
+                                ) : (
+                                    <Eye size="20" />
+                                )}
+                            </button>
+                        ) : (
+                            suffix
+                        )
+                    }
+                    className={cn("w-full", inputClassName)}
+                    classNames={{
+                        inputWrapper: cn(
+                            "bg-white rounded-[8px] border border-neutral-150 h-[45px]",
+                            hasError && "border-red-500",
+                        ),
+                    }}
+                />
+            )}
+
+            {/* TEXTAREA */}
+            {as === "textarea" && (
+                <Textarea
+                    name={name}
+                    value={String(inputValue)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange(e.target.value)}
+                    onBlur={handleBlur}
+                    placeholder={placeholder}
+                    aria-label={accessibleLabel}
+                    isDisabled={disabled || loading}
+                    className={cn("w-full", inputClassName)}
+                    classNames={{
+                        inputWrapper: cn(
+                            "bg-white border border-neutral-150 rounded-[8px] min-h-[100px]",
+                            hasError && "border-red-500",
+                        ),
+                    }}
+                />
+            )}
+
+            {/* SELECT */}
+            {as === "select" && (
+                <Select
+                    aria-label={accessibleLabel}
+                    selectedKeys={
+                        multiple
+                            ? new Set(Array.isArray(inputValue) ? (inputValue as string[]) : [])
+                            : inputValue
+                            ? new Set([String(inputValue)])
+                            : new Set()
+                    }
+                    onSelectionChange={async (keys) => {
+                        if (multiple) {
+                            const selected = Array.from(keys) as string[];
+                            await setFieldValue(name, selected, true);
+                        } else {
+                            const selected = Array.from(keys)[0];
+                            await setFieldValue(name, selected ? String(selected) : "", true);
+                        }
+                        await setFieldTouched(name, true, true);
+                    }}
+                    placeholder={placeholder || "Select option"}
+                    isDisabled={disabled || loading}
+                    selectionMode={multiple ? "multiple" : "single"}
+                    className={cn("w-full", selectClassName)}
+                    classNames={{
+                        trigger: cn(
+                            "bg-white border border-neutral-150 rounded-[8px] h-[45px]",
+                            selectTriggerClassName,
+                        ),
+                        popoverContent: cn("rounded-md", selectPopoverClassName),
+                        selectorIcon: selectIndicatorClassName,
+                    }}
+                >
+                    {options.map((opt) => (
+                        <SelectItem key={opt.value} textValue={opt.label}>
+                            {opt.label}
+                        </SelectItem>
+                    ))}
+                </Select>
+            )}
+
+            <AnimatePresence mode="wait">
+                {hasError ? (
+                    <motion.div
+                        key="error"
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex gap-1 items-center text-red-500"
+                    >
+                        <Danger size={18} color="#fb2c36" />
+                        <p className="text-xs capitalize font-medium">
+                            {String(fieldError)}
+                        </p>
+                    </motion.div>
+                ) : info ? (
+                    <motion.div
+                        key="info"
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex gap-1 items-center text-grey-03"
+                    >
+                        <InfoCircle size={18} color="#A3A3A3" />
+                        <p className="text-xs font-medium">{info}</p>
+                    </motion.div>
+                ) : null}
+            </AnimatePresence>
+        </div>
+    );
+}
