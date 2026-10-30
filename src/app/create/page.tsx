@@ -13,6 +13,12 @@ import {
 } from 'lucide-react';
 import { Category, Currency } from '@/types/listing';
 import { useApp } from '@/context/AppContext';
+import {
+  CustomField,
+  CustomText,
+  AppButton,
+  CustomCheckboxGroup,
+} from '@/components/ui';
 import Navbar from '@/components/Navbar';
 import NotificationBar from '@/components/NotificationBar';
 import AuthModal from '@/components/AuthModal';
@@ -157,17 +163,21 @@ export default function CreateListingPage() {
               🔒
             </div>
             <div className="space-y-2">
-              <h2 className="font-sans font-semibold text-[20px] text-ink">Sign in required</h2>
-              <p className="text-[14px] text-slate leading-relaxed">
+              <CustomText type="title-lg" as="h2" className="font-sans font-semibold text-ink">
+                Sign in required
+              </CustomText>
+              <CustomText type="body-md" className="text-slate leading-relaxed">
                 You must be logged in to create and host a split subscription pool.
-              </p>
+              </CustomText>
             </div>
-            <button
-              onClick={() => setIsAuthModalOpen(true)}
-              className="w-full py-3.5 bg-charcoal text-white dark:text-[#141c17] rounded-[12px] font-medium text-[14px] cursor-pointer"
+            <AppButton
+              variant="primary"
+              size="lg"
+              fullWidth
+              onPress={() => setIsAuthModalOpen(true)}
             >
               Sign in to continue
-            </button>
+            </AppButton>
           </div>
         </div>
         <AuthModal
@@ -207,8 +217,12 @@ export default function CreateListingPage() {
           </div>
 
           <div className="space-y-2">
-            <h1 className="font-sans font-semibold text-[32px] tracking-tight text-ink leading-none">Your split is live!</h1>
-            <p className="text-[15px] text-slate">People can now find and join your listing.</p>
+            <CustomText type="headline-lg" as="h1" className="font-sans font-semibold tracking-tight text-ink leading-none">
+              Your split is live!
+            </CustomText>
+            <CustomText type="body-md" className="text-slate">
+              People can now find and join your listing.
+            </CustomText>
           </div>
 
           <div className="bg-surface border border-border rounded-[16px] p-5 text-left space-y-4">
@@ -216,21 +230,18 @@ export default function CreateListingPage() {
               Share to fill your slots faster
             </span>
             <div className="flex gap-2">
-              <input
-                type="text"
-                readOnly
+              <CustomField
                 value={shareUrl}
-                className="flex-1 bg-white border border-border rounded-xl px-3.5 py-2 text-[13px] text-slate font-mono outline-none"
+                disabled
+                className="flex-1"
               />
-              <button
-                onClick={handleCopyLink}
-                className={`px-4 rounded-xl text-[13px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  copied ? 'bg-gt-green text-white' : 'bg-charcoal text-white dark:text-[#141c17]'
-                }`}
+              <AppButton
+                onPress={handleCopyLink}
+                variant="primary"
+                startContent={copied ? <Check size={14} /> : <Copy size={14} />}
               >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                <span>{copied ? 'Copied!' : 'Copy link'}</span>
-              </button>
+                {copied ? 'Copied!' : 'Copy link'}
+              </AppButton>
             </div>
 
             <div className="flex gap-2">
@@ -254,22 +265,26 @@ export default function CreateListingPage() {
           </div>
 
           <div className="flex flex-col gap-3">
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="w-full py-3.5 bg-charcoal text-white dark:text-[#141c17] font-medium rounded-xl text-[14px] cursor-pointer"
+            <AppButton
+              variant="primary"
+              size="lg"
+              fullWidth
+              onPress={() => router.push('/dashboard')}
             >
               View my listing
-            </button>
-            <button
-              onClick={() => {
+            </AppButton>
+            <AppButton
+              variant="secondary-outline"
+              size="lg"
+              fullWidth
+              onPress={() => {
                 setIsSuccess(false);
                 setStep(1);
                 router.push('/browse');
               }}
-              className="w-full py-3.5 bg-transparent text-slate hover:text-ink font-medium text-[14px] cursor-pointer"
             >
               Browse other splits
-            </button>
+            </AppButton>
           </div>
         </div>
       </div>
@@ -359,7 +374,9 @@ export default function CreateListingPage() {
                   className="space-y-6"
                 >
                   <div>
-                    <h2 className="font-sans font-semibold text-[24px] text-ink">What are you splitting?</h2>
+                    <CustomText type="headline-sm" as="h2" className="font-sans font-semibold text-ink">
+                      What are you splitting?
+                    </CustomText>
                   </div>
 
                   {/* Card selection grid */}
@@ -413,13 +430,11 @@ export default function CreateListingPage() {
                       animate={{ opacity: 1, height: 'auto' }}
                       className="space-y-2 pt-2"
                     >
-                      <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust">Custom Plan Name</label>
-                      <input
-                        type="text"
+                      <CustomField
+                        label="Custom Plan Name"
                         placeholder="e.g. Claude Pro, Midjourney Team, Bloomberg"
                         value={customPlanName}
-                        onChange={(e) => setCustomPlanName(e.target.value)}
-                        className="w-full h-12 bg-white border border-border rounded-xl px-4 text-[14px] outline-none focus:border-ink"
+                        onChange={(val) => setCustomPlanName(String(val))}
                       />
                     </motion.div>
                   )}
@@ -447,14 +462,12 @@ export default function CreateListingPage() {
 
                   {/* Description */}
                   <div className="space-y-2">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">Description (optional)</span>
-                    <textarea
-                      rows={4}
-                      maxLength={200}
+                    <CustomField
+                      as="textarea"
+                      label="Description (optional)"
                       placeholder="Add details about this split — anything joiners should know."
                       value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="w-full bg-white border border-border rounded-xl p-4 text-[14px] outline-none focus:border-ink resize-none"
+                      onChange={(val) => setDescription(String(val).slice(0, 200))}
                     />
                     <div className="flex justify-end text-[11px] text-dust font-mono">
                       <span className={description.length >= 180 ? 'text-gt-red' : description.length >= 150 ? 'text-gt-amber' : 'text-dust'}>
@@ -476,7 +489,9 @@ export default function CreateListingPage() {
                   className="space-y-6"
                 >
                   <div>
-                    <h2 className="font-sans font-semibold text-[24px] text-ink">Set your split price</h2>
+                    <CustomText type="headline-sm" as="h2" className="font-sans font-semibold text-ink">
+                      Set your split price
+                    </CustomText>
                   </div>
 
                   {/* Total Cost Row */}
@@ -485,23 +500,24 @@ export default function CreateListingPage() {
                       Full plan cost per month
                     </label>
                     <div className="flex gap-3">
-                      <select
+                      <CustomField
+                        as="select"
                         value={currency}
-                        onChange={(e) => setCurrency(e.target.value as Currency)}
-                        className="h-12 bg-surface border border-border rounded-xl px-4 text-[14px] outline-none"
-                      >
-                        <option value="USD">🇺🇸 USD</option>
-                        <option value="GBP">🇬🇧 GBP</option>
-                        <option value="EUR">🇪🇺 EUR</option>
-                        <option value="NGN">🇳🇬 NGN</option>
-                      </select>
+                        options={[
+                          { label: '🇺🇸 USD', value: 'USD' },
+                          { label: '🇬🇧 GBP', value: 'GBP' },
+                          { label: '🇪🇺 EUR', value: 'EUR' },
+                          { label: '🇳🇬 NGN', value: 'NGN' },
+                        ]}
+                        onChange={(val) => setCurrency((String(val) || 'USD') as Currency)}
+                        className="w-[140px]"
+                      />
 
-                      <input
+                      <CustomField
                         type="number"
-                        step="0.01"
-                        className="flex-1 h-12 bg-white border border-border rounded-xl px-4 text-[32px] font-semibold outline-none focus:border-ink"
                         value={totalCost}
-                        onChange={(e) => setTotalCost(parseFloat(e.target.value) || 0)}
+                        onChange={(val) => setTotalCost(parseFloat(String(val)) || 0)}
+                        className="flex-1"
                       />
                     </div>
                   </div>
@@ -569,7 +585,9 @@ export default function CreateListingPage() {
                   className="space-y-6"
                 >
                   <div>
-                    <h2 className="font-sans font-semibold text-[24px] text-ink">How should people reach you?</h2>
+                    <CustomText type="headline-sm" as="h2" className="font-sans font-semibold text-ink">
+                      How should people reach you?
+                    </CustomText>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -602,29 +620,23 @@ export default function CreateListingPage() {
                     </div>
                   </div>
 
-                  {/* Contact Input fields */}
+                  {/* Contact Input fields using CustomField */}
                   {contactMethod === 'WhatsApp' ? (
-                    <div className="space-y-2">
-                      <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">WhatsApp number</span>
-                      <input
-                        type="tel"
-                        placeholder="+1 (555) 000-0000"
-                        value={whatsappNumber}
-                        onChange={(e) => setWhatsappNumber(e.target.value)}
-                        className="w-full h-12 bg-white border border-border rounded-xl px-4 text-[14px] outline-none focus:border-ink"
-                      />
-                    </div>
+                    <CustomField
+                      label="WhatsApp number"
+                      type="tel"
+                      placeholder="+1 (555) 000-0000"
+                      value={whatsappNumber}
+                      onChange={(val) => setWhatsappNumber(String(val))}
+                    />
                   ) : (
-                    <div className="space-y-2">
-                      <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">Email Address</span>
-                      <input
-                        type="email"
-                        placeholder="you@example.com"
-                        value={contactEmail}
-                        onChange={(e) => setContactEmail(e.target.value)}
-                        className="w-full h-12 bg-white border border-border rounded-xl px-4 text-[14px] outline-none focus:border-ink"
-                      />
-                    </div>
+                    <CustomField
+                      label="Email Address"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={contactEmail}
+                      onChange={(val) => setContactEmail(String(val))}
+                    />
                   )}
 
                   {/* Blue Info Notice Box */}
@@ -635,19 +647,18 @@ export default function CreateListingPage() {
                     </p>
                   </div>
 
-                  {/* Custom Checkbox */}
-                  <div className="flex items-start gap-3 pt-2 select-none">
-                    <div
-                      onClick={() => setTermsAccepted(!termsAccepted)}
-                      className="w-[18px] h-[18px] rounded border-[1.5px] border-border bg-white flex items-center justify-center cursor-pointer shrink-0 mt-0.5"
-                    >
-                      {termsAccepted && (
-                        <div className="w-[10px] h-[10px] bg-ink rounded-sm" />
-                      )}
-                    </div>
-                    <span className="text-[13px] text-slate leading-relaxed">
-                      I confirm this split complies with each platform&apos;s terms of service
-                    </span>
+                  {/* CustomCheckboxGroup */}
+                  <div className="pt-2">
+                    <CustomCheckboxGroup
+                      value={termsAccepted ? ['accepted'] : []}
+                      onChange={(vals) => setTermsAccepted(vals.includes('accepted'))}
+                      options={[
+                        {
+                          value: 'accepted',
+                          label: "I confirm this split complies with each platform's terms of service",
+                        },
+                      ]}
+                    />
                   </div>
 
                   {submitError && (
@@ -662,33 +673,37 @@ export default function CreateListingPage() {
             {/* Navigation Controllers */}
             <div className="flex justify-between items-center pt-8 border-t border-border mt-8">
               {step > 1 ? (
-                <button
-                  onClick={handleBack}
-                  className="px-5 py-3 border border-border bg-white text-ink hover:bg-surface font-semibold rounded-xl text-[13px] flex items-center gap-1 cursor-pointer"
+                <AppButton
+                  variant="secondary-outline"
+                  onPress={handleBack}
                 >
                   ← Back
-                </button>
+                </AppButton>
               ) : (
                 <div />
               )}
 
               {step < 3 ? (
-                <button
-                  onClick={handleNext}
+                <AppButton
+                  variant="primary"
+                  onPress={handleNext}
                   disabled={selectedPlan === 'Other' && !customPlanName}
-                  className="px-6 py-3 bg-charcoal text-white dark:text-[#141c17] font-semibold rounded-xl text-[13px] flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <span>Continue</span>
-                  <span>→</span>
-                </button>
+                  Continue →
+                </AppButton>
               ) : (
-                <button
-                  onClick={handlePostSplit}
-                  disabled={isSubmitting || !termsAccepted || (contactMethod === 'WhatsApp' ? !whatsappNumber : !contactEmail)}
-                  className="px-8 py-3 bg-charcoal text-white dark:text-[#141c17] font-semibold rounded-xl text-[13px] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                <AppButton
+                  variant="primary"
+                  onPress={handlePostSplit}
+                  loading={isSubmitting}
+                  disabled={
+                    isSubmitting ||
+                    !termsAccepted ||
+                    (contactMethod === 'WhatsApp' ? !whatsappNumber : !contactEmail)
+                  }
                 >
-                  {isSubmitting ? 'Posting your split...' : 'Post my split'}
-                </button>
+                  Post my split
+                </AppButton>
               )}
             </div>
           </div>
@@ -712,9 +727,9 @@ export default function CreateListingPage() {
                     <PlanIcon name={planName || 'Custom'} size={22} />
                   </div>
                   <div>
-                    <h3 className="font-display font-semibold text-[16px] text-ink leading-tight">
+                    <CustomText type="title-md" as="h3" className="font-display font-semibold text-ink leading-tight">
                       {planName || 'Custom subscription'}
-                    </h3>
+                    </CustomText>
                     <span className="text-[12px] font-medium text-dust">
                       {category}
                     </span>
@@ -765,9 +780,14 @@ export default function CreateListingPage() {
                 </div>
 
                 {/* Action Button Mock */}
-                <button className="w-full h-11 bg-charcoal text-white dark:text-[#141c17] rounded-[10px] text-[14px] font-medium mt-4 select-none pointer-events-none opacity-50">
+                <AppButton
+                  variant="primary"
+                  fullWidth
+                  disabled
+                  className="mt-4 pointer-events-none opacity-50"
+                >
                   Join split
-                </button>
+                </AppButton>
               </div>
             </div>
           </div>

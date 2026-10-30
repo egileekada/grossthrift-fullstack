@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, RefreshCw } from 'lucide-react';
 import { Category } from '@/types/listing';
 import { useApp } from '@/context/AppContext';
+import { CustomText } from '@/components/ui';
 import Navbar from '@/components/Navbar';
 import NotificationBar from '@/components/NotificationBar';
 import ListingCard from '@/components/ListingCard';
@@ -141,12 +142,16 @@ function BrowseContent() {
       <div className="max-w-[1120px] mx-auto px-6 sm:px-12 mb-10" id="browse-header-section">
         {/* Simple Title Row */}
         <div className="text-center mb-8 space-y-2">
-          <h1 className="font-display font-bold text-[36px] sm:text-[48px] tracking-[-1.5px] text-ink leading-tight">
+          <CustomText
+            type="display-sm"
+            as="h1"
+            className="font-display font-bold tracking-[-1.5px] text-ink leading-tight"
+          >
             Find your Next <span className="font-serif italic font-light text-accent">Split</span>
-          </h1>
-          <p className="text-[14px] sm:text-[15px] text-slate font-medium">
+          </CustomText>
+          <CustomText type="body-md" className="text-slate font-medium">
             Find a premium plan, co-buy together, and start saving instantly.
-          </p>
+          </CustomText>
         </div>
 
         {/* EXQUISITE REAL ESTATE OUTLAY SEARCH CONTAINER */}

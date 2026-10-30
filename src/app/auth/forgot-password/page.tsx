@@ -10,10 +10,10 @@ import {
   resetPasswordSchema,
   ResetPasswordFormValues,
 } from '@/lib/validations/auth';
-import { FormikField } from '@/components/ui';
+import { FormikField, OTPInput, AppButton, CustomText } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
 import { useForgotPasswordMutation, useUpdatePasswordMutation } from '@/hooks/useAuth';
-import { AlertCircle, ArrowLeft, Check, KeyRound, Loader2, Lock } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, KeyRound, Lock } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
 export default function ForgotPasswordPage() {
@@ -87,14 +87,18 @@ export default function ForgotPasswordPage() {
             <div className="w-10 h-10 bg-sage-light text-sage rounded-xl flex items-center justify-center mb-4">
               <KeyRound size={20} />
             </div>
-            <h1 className="text-2xl font-bold font-display text-charcoal tracking-tight">
+            <CustomText
+              type="headline-sm"
+              as="h1"
+              className="font-bold font-display text-charcoal tracking-tight"
+            >
               {step === 'request' ? 'Forgot your password?' : 'Set a new password'}
-            </h1>
-            <p className="text-sm text-slate mt-1">
+            </CustomText>
+            <CustomText type="body-md" className="text-slate mt-1">
               {step === 'request'
                 ? 'Enter the email address associated with your GrossThrift account to receive a 6-digit reset code.'
                 : `Enter the 6-digit verification code for ${targetEmail} and choose a new password.`}
-            </p>
+            </CustomText>
           </div>
 
           {serverError && (
@@ -134,28 +138,23 @@ export default function ForgotPasswordPage() {
                   />
 
                   <div className="pt-2">
-                    <button
+                    <AppButton
                       type="submit"
-                      disabled={forgotPasswordMutation.isPending}
-                      className="w-full py-3.5 bg-charcoal text-white dark:text-[#141c17] font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                      variant="primary"
+                      size="lg"
+                      fullWidth
+                      loading={forgotPasswordMutation.isPending}
                     >
-                      {forgotPasswordMutation.isPending ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          <span>Generating reset code...</span>
-                        </>
-                      ) : (
-                        <span>Send Reset Code</span>
-                      )}
-                    </button>
+                      Send Reset Code
+                    </AppButton>
                   </div>
 
-                  <p className="text-xs text-center text-slate pt-2">
+                  <CustomText type="body-sm" className="text-center text-slate pt-2">
                     Remembered your password?{' '}
                     <Link href="/auth/login" className="text-sage font-semibold hover:underline">
                       Sign in
                     </Link>
-                  </p>
+                  </CustomText>
                 </Form>
               )}
             </Formik>
@@ -172,11 +171,12 @@ export default function ForgotPasswordPage() {
             >
               {() => (
                 <Form className="space-y-4">
-                  <FormikField
+                  <OTPInput
                     name="token"
                     label="6-Digit Verification Code"
-                    placeholder="123456"
-                    type="text"
+                    length={6}
+                    autoSubmit={false}
+                    error={Boolean(serverError)}
                   />
 
                   <FormikField
@@ -194,31 +194,27 @@ export default function ForgotPasswordPage() {
                   />
 
                   <div className="pt-2 flex gap-3">
-                    <button
+                    <AppButton
                       type="button"
-                      onClick={() => {
+                      variant="secondary-outline"
+                      size="lg"
+                      onPress={() => {
                         setStep('request');
                         setServerError('');
                         setServerSuccess('');
                       }}
-                      className="px-4 py-3.5 border border-border rounded-xl text-xs font-semibold text-slate hover:bg-surface cursor-pointer"
                     >
                       Change Email
-                    </button>
-                    <button
+                    </AppButton>
+                    <AppButton
                       type="submit"
-                      disabled={updatePasswordMutation.isPending}
-                      className="flex-1 py-3.5 bg-charcoal text-white dark:text-[#141c17] font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                      variant="primary"
+                      size="lg"
+                      fullWidth
+                      loading={updatePasswordMutation.isPending}
                     >
-                      {updatePasswordMutation.isPending ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          <span>Updating password...</span>
-                        </>
-                      ) : (
-                        <span>Reset Password</span>
-                      )}
-                    </button>
+                      Reset Password
+                    </AppButton>
                   </div>
                 </Form>
               )}
@@ -234,4 +230,3 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
-

@@ -80,9 +80,9 @@ export default function CustomField<T = unknown>({
     };
 
     return (
-        <div className={cn("w-full flex flex-col gap-1", className)}>
+        <div className={cn("w-full flex flex-col gap-1.5", className)}>
             {label && (
-                <label className="text-sm font-medium text-grey-04">
+                <label className="text-xs font-medium text-ink">
                     {label}
                 </label>
             )}
@@ -105,13 +105,13 @@ export default function CustomField<T = unknown>({
                             <button
                                 type="button"
                                 aria-label={showPassword ? "Hide password" : "Show password"}
-                                className="flex items-center justify-center focus:outline-none"
+                                className="flex items-center justify-center focus:outline-none text-slate"
                                 onClick={() => setShowPassword((prev) => !prev)}
                             >
                                 {showPassword ? (
-                                    <EyeSlash size="20" />
+                                    <EyeSlash size="18" />
                                 ) : (
-                                    <Eye size="20" />
+                                    <Eye size="18" />
                                 )}
                             </button>
                         ) : (
@@ -120,11 +120,15 @@ export default function CustomField<T = unknown>({
                     }
                     className={cn("w-full", inputClassName)}
                     classNames={{
+                        base: "w-full",
+                        mainWrapper: "w-full",
                         inputWrapper: cn(
-                            "bg-grey-01 border border-grey-02 rounded-[8px] h-[45px]",
-                            hasError && "border-red-500",
+                            "bg-surface border border-border rounded-xl h-[45px] px-3.5 shadow-none !outline-none !ring-0 data-[hover=true]:bg-surface group-data-[focus=true]:bg-surface group-data-[focus=true]:border-border",
+                            hasError && "border-red-500 group-data-[focus=true]:border-red-500",
                             inputGroupClassName,
                         ),
+                        innerWrapper: "bg-transparent !border-0 !border-none !outline-none !ring-0 shadow-none",
+                        input: "bg-transparent text-xs text-ink placeholder:text-dust !border-0 !border-none !outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 !shadow-none",
                     }}
                 />
             )}
@@ -140,10 +144,13 @@ export default function CustomField<T = unknown>({
                     isDisabled={disabled || loading}
                     className={cn("w-full", inputClassName)}
                     classNames={{
+                        base: "w-full",
                         inputWrapper: cn(
-                            "bg-grey-01 border border-grey-02 rounded-[8px] min-h-[100px]",
-                            hasError && "border-red-500",
+                            "bg-surface border border-border rounded-xl min-h-[100px] p-3.5 shadow-none !outline-none !ring-0 data-[hover=true]:bg-surface group-data-[focus=true]:bg-surface group-data-[focus=true]:border-border",
+                            hasError && "border-red-500 group-data-[focus=true]:border-red-500",
                         ),
+                        innerWrapper: "bg-transparent !border-0 !border-none !outline-none !ring-0 shadow-none",
+                        input: "bg-transparent text-xs text-ink placeholder:text-dust !border-0 !border-none !outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 !shadow-none",
                     }}
                 />
             )}
@@ -175,7 +182,7 @@ export default function CustomField<T = unknown>({
                     className={cn("w-full", selectClassName)}
                     classNames={{
                         trigger: cn(
-                            "bg-grey-01 border border-grey-02 rounded-[8px] h-[45px]",
+                            "bg-surface border border-border rounded-xl h-[45px] px-3.5 shadow-none !outline-none !ring-0",
                             selectTriggerClassName,
                         ),
                         popoverContent: cn("rounded-md", selectPopoverClassName),

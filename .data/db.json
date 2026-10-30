@@ -17,14 +17,7 @@
       "verificationDetail": "https://linkedin.com/in/dax"
     }
   ],
-  "sessions": [
-    {
-      "token": "68b5d0d54d0451f2af34d384284ac86c91ec7336c9ac94687228885cca06876e",
-      "userId": "8d3451bc-ede7-4cb2-9007-78576aff2316",
-      "createdAt": "2026-10-28T16:40:08.895Z",
-      "expiresAt": "2026-11-27T16:40:08.895Z"
-    }
-  ],
+  "sessions": [],
   "otpCodes": [],
   "passwordResetTokens": [],
   "services": [

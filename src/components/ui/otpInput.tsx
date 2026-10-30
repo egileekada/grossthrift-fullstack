@@ -11,6 +11,7 @@ interface OTPInputProps {
   length?: number;
   error?: boolean;
   isLoading?: boolean;
+  autoSubmit?: boolean;
 }
 
 function OTPInput({
@@ -20,6 +21,7 @@ function OTPInput({
   length = 6,
   error,
   isLoading,
+  autoSubmit = true,
 }: OTPInputProps) {
   const [field, meta, helpers] = useField<string>(name);
 
@@ -36,6 +38,7 @@ function OTPInput({
   /** ✅ Auto submit AFTER state update */
   useEffect(() => {
     if (
+      autoSubmit &&
       field.value &&
       field.value.length === length &&
       current !== field.value
@@ -43,7 +46,7 @@ function OTPInput({
       submitForm();
       setCurrent(field.value);
     }
-  }, [field.value, length, submitForm, current]);
+  }, [autoSubmit, field.value, length, submitForm, current]);
 
   /** 🔥 Shake on external error */
   useEffect(() => {

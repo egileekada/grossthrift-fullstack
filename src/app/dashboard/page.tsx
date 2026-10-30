@@ -16,6 +16,7 @@ import {
   User,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { AppButton, CustomText } from '@/components/ui';
 import Navbar from '@/components/Navbar';
 import NotificationBar from '@/components/NotificationBar';
 import ListingDetailModal, { getPoolCredentials } from '@/components/ListingDetailModal';
@@ -120,17 +121,21 @@ export default function MyDashboard() {
               🔒
             </div>
             <div className="space-y-2">
-              <h2 className="font-sans font-semibold text-[20px] text-ink">Sign in required</h2>
-              <p className="text-[14px] text-slate leading-relaxed">
+              <CustomText type="title-lg" as="h2" className="font-sans font-semibold text-ink">
+                Sign in required
+              </CustomText>
+              <CustomText type="body-md" className="text-slate leading-relaxed">
                 Please sign in to view your dashboard, active splits, and pool credentials.
-              </p>
+              </CustomText>
             </div>
-            <button
-              onClick={() => setIsAuthModalOpen(true)}
-              className="w-full py-3.5 bg-charcoal text-white dark:text-[#141c17] rounded-[12px] font-medium text-[14px] cursor-pointer"
+            <AppButton
+              variant="primary"
+              size="lg"
+              fullWidth
+              onPress={() => setIsAuthModalOpen(true)}
             >
               Sign in to continue
-            </button>
+            </AppButton>
           </div>
         </div>
         <AuthModal

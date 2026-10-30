@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Formik, Form } from 'formik';
 import { resetPasswordSchema, ResetPasswordFormValues } from '@/lib/validations/auth';
-import { FormikField } from '@/components/ui';
+import { FormikField, CustomField, OTPInput, AppButton, CustomText } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
 import { useUpdatePasswordMutation } from '@/hooks/useAuth';
-import { AlertCircle, ArrowLeft, Check, KeyRound, Loader2, Lock } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, KeyRound, Lock } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
 function ResetPasswordContent() {
@@ -70,12 +70,16 @@ function ResetPasswordContent() {
             <div className="w-10 h-10 bg-sage-light text-sage rounded-xl flex items-center justify-center mb-4">
               <KeyRound size={20} />
             </div>
-            <h1 className="text-2xl font-bold font-display text-charcoal tracking-tight">
+            <CustomText
+              type="headline-sm"
+              as="h1"
+              className="font-bold font-display text-charcoal tracking-tight"
+            >
               Reset your password
-            </h1>
-            <p className="text-sm text-slate mt-1">
+            </CustomText>
+            <CustomText type="body-md" className="text-slate mt-1">
               Enter your email, 6-digit verification code, and your new password.
-            </p>
+            </CustomText>
           </div>
 
           {serverError && (
@@ -104,24 +108,20 @@ function ResetPasswordContent() {
           >
             {() => (
               <Form className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate mb-1.5">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@domain.com"
-                    className="w-full px-4 py-3 bg-off-white border border-border rounded-xl text-sm font-medium text-charcoal focus:outline-none focus:ring-2 focus:ring-sage/20 focus:border-sage transition-all"
-                  />
-                </div>
+                <CustomField
+                  label="Email Address"
+                  type="email"
+                  value={email}
+                  onChange={(val) => setEmail(String(val))}
+                  placeholder="you@domain.com"
+                />
 
-                <FormikField
+                <OTPInput
                   name="token"
                   label="6-Digit Verification Code"
-                  placeholder="123456"
-                  type="text"
+                  length={6}
+                  autoSubmit={false}
+                  error={Boolean(serverError)}
                 />
 
                 <FormikField
@@ -139,20 +139,15 @@ function ResetPasswordContent() {
                 />
 
                 <div className="pt-2">
-                  <button
+                  <AppButton
                     type="submit"
-                    disabled={updatePasswordMutation.isPending}
-                    className="w-full py-3.5 bg-charcoal text-white dark:text-[#141c17] font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    loading={updatePasswordMutation.isPending}
                   >
-                    {updatePasswordMutation.isPending ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>Updating password...</span>
-                      </>
-                    ) : (
-                      <span>Update Password</span>
-                    )}
-                  </button>
+                    Update Password
+                  </AppButton>
                 </div>
               </Form>
             )}
@@ -175,4 +170,3 @@ export default function ResetPasswordPage() {
     </Suspense>
   );
 }
-

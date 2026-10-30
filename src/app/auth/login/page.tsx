@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Formik, Form } from 'formik';
 import { loginSchema, LoginFormValues } from '@/lib/validations/auth';
-import { FormikField } from '@/components/ui';
+import { FormikField, AppButton, CustomText } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
 import { useLoginMutation } from '@/hooks/useAuth';
-import { AlertCircle, ShieldCheck, Loader2, Lock } from 'lucide-react';
+import { AlertCircle, ShieldCheck, Lock } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
 export default function LoginPage() {
@@ -44,12 +44,16 @@ export default function LoginPage() {
             <div className="w-10 h-10 bg-sage-light text-sage rounded-xl flex items-center justify-center mb-4">
               <ShieldCheck size={20} />
             </div>
-            <h1 className="text-2xl font-bold font-display text-charcoal tracking-tight">
+            <CustomText
+              type="headline-sm"
+              as="h1"
+              className="font-bold font-display text-charcoal tracking-tight"
+            >
               Welcome back
-            </h1>
-            <p className="text-sm text-slate mt-1">
+            </CustomText>
+            <CustomText type="body-md" className="text-slate mt-1">
               Sign in with your email and password to access your active splits, credentials, and escrow payouts.
-            </p>
+            </CustomText>
           </div>
 
           {serverError && (
@@ -78,40 +82,34 @@ export default function LoginPage() {
                   label="Password"
                   placeholder="••••••••"
                   isPassword
+                  labelRight={
+                    <Link
+                      href="/auth/forgot-password"
+                      className="text-xs font-semibold text-sage hover:underline"
+                    >
+                      Forgot password?
+                    </Link>
+                  }
                 />
 
-                <div className="flex items-center justify-end -mt-1">
-                  <Link
-                    href="/auth/forgot-password"
-                    className="text-xs font-semibold text-sage hover:underline"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-
                 <div className="pt-2">
-                  <button
+                  <AppButton
                     type="submit"
-                    disabled={loginMutation.isPending}
-                    className="w-full py-3.5 bg-charcoal text-white dark:text-[#141c17] font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    loading={loginMutation.isPending}
                   >
-                    {loginMutation.isPending ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>Signing in...</span>
-                      </>
-                    ) : (
-                      <span>Sign In</span>
-                    )}
-                  </button>
+                    Sign In
+                  </AppButton>
                 </div>
 
-                <p className="text-xs text-center text-slate pt-2">
+                <CustomText type="body-sm" className="text-center text-slate pt-2">
                   Don&apos;t have an account?{' '}
                   <Link href="/auth/signup" className="text-sage font-semibold hover:underline">
                     Create one
                   </Link>
-                </p>
+                </CustomText>
               </Form>
             )}
           </Formik>

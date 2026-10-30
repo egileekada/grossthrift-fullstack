@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Formik, Form } from 'formik';
 import { signupSchema, SignupFormValues } from '@/lib/validations/auth';
-import { FormikField } from '@/components/ui';
+import { FormikField, CustomField, AppButton, CustomText } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
 import { useSignupMutation } from '@/hooks/useAuth';
-import { AlertCircle, Check, Globe, Loader2, Lock, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Check, Lock, ShieldCheck } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
 const COUNTRIES = [
@@ -68,12 +68,16 @@ export default function SignupPage() {
             <div className="w-10 h-10 bg-sage-light text-sage rounded-xl flex items-center justify-center mb-4">
               <ShieldCheck size={20} />
             </div>
-            <h1 className="text-2xl font-bold font-display text-charcoal tracking-tight">
+            <CustomText
+              type="headline-sm"
+              as="h1"
+              className="font-bold font-display text-charcoal tracking-tight"
+            >
               Create your account
-            </h1>
-            <p className="text-sm text-slate mt-1">
+            </CustomText>
+            <CustomText type="body-md" className="text-slate mt-1">
               Join GrossThrift to split family &amp; group subscriptions safely with escrow protection.
-            </p>
+            </CustomText>
           </div>
 
           {serverError && (
@@ -111,26 +115,19 @@ export default function SignupPage() {
                   type="email"
                 />
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate mb-1.5 flex items-center gap-1.5">
-                    <Globe size={13} className="text-sage" />
-                    <span>Primary Billing Region</span>
-                  </label>
-                  <select
-                    value={selectedCountry.name}
-                    onChange={(e) => {
-                      const found = COUNTRIES.find((c) => c.name === e.target.value);
-                      if (found) setSelectedCountry(found);
-                    }}
-                    className="w-full px-4 py-3 bg-off-white border border-border rounded-xl text-sm font-medium text-charcoal focus:outline-none focus:ring-2 focus:ring-sage/20 focus:border-sage transition-all"
-                  >
-                    {COUNTRIES.map((country) => (
-                      <option key={country.name} value={country.name}>
-                        {country.flag} {country.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CustomField
+                  as="select"
+                  label="Primary Billing Region"
+                  value={selectedCountry.name}
+                  options={COUNTRIES.map((c) => ({
+                    label: `${c.flag} ${c.name}`,
+                    value: c.name,
+                  }))}
+                  onChange={(val) => {
+                    const found = COUNTRIES.find((c) => c.name === String(val));
+                    if (found) setSelectedCountry(found);
+                  }}
+                />
 
                 <FormikField
                   name="password"
@@ -147,28 +144,23 @@ export default function SignupPage() {
                 />
 
                 <div className="pt-2">
-                  <button
+                  <AppButton
                     type="submit"
-                    disabled={signupMutation.isPending}
-                    className="w-full py-3.5 bg-charcoal text-white dark:text-[#141c17] font-semibold text-sm rounded-xl shadow-sm flex items-center justify-center gap-2 disabled:opacity-60"
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    loading={signupMutation.isPending}
                   >
-                    {signupMutation.isPending ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>Creating account...</span>
-                      </>
-                    ) : (
-                      <span>Create Free Account</span>
-                    )}
-                  </button>
+                    Create Free Account
+                  </AppButton>
                 </div>
 
-                <p className="text-xs text-center text-slate pt-2">
+                <CustomText type="body-sm" className="text-center text-slate pt-2">
                   Already have an account?{' '}
                   <Link href="/auth/login" className="text-sage font-semibold hover:underline">
                     Sign in
                   </Link>
-                </p>
+                </CustomText>
               </Form>
             )}
           </Formik>

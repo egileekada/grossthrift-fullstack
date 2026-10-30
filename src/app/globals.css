@@ -172,6 +172,15 @@ html.dark {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  [data-slot="input"],
+  [data-slot="inner-wrapper"],
+  [data-slot="input-wrapper"] input,
+  [data-slot="input-wrapper"] textarea {
+    border: 0 !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
 }
 
 /* Custom Tabular Nums */

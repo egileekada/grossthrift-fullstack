@@ -140,11 +140,14 @@ export function FormikField<T = unknown>({
                     }
                     className={cn("w-full", inputClassName)}
                     classNames={{
+                        base: "w-full",
+                        mainWrapper: "w-full",
                         inputWrapper: cn(
-                            "bg-surface rounded-xl border border-border h-[45px] px-3.5 shadow-xs",
-                            hasError && "border-red-500",
+                            "bg-surface rounded-xl border border-border h-[45px] px-3.5 shadow-none !outline-none !ring-0 data-[hover=true]:bg-surface group-data-[focus=true]:bg-surface group-data-[focus=true]:border-border",
+                            hasError && "border-red-500 group-data-[focus=true]:border-red-500",
                         ),
-                        input: "text-xs text-ink placeholder:text-dust",
+                        innerWrapper: "bg-transparent !border-0 !border-none !outline-none !ring-0 shadow-none",
+                        input: "bg-transparent text-xs text-ink placeholder:text-dust !border-0 !border-none !outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 !shadow-none",
                     }}
                 />
             )}
@@ -161,10 +164,13 @@ export function FormikField<T = unknown>({
                     isDisabled={disabled || loading}
                     className={cn("w-full", inputClassName)}
                     classNames={{
+                        base: "w-full",
                         inputWrapper: cn(
-                            "bg-white border border-neutral-150 rounded-[8px] min-h-[100px]",
-                            hasError && "border-red-500",
+                            "bg-surface border border-border rounded-xl min-h-[100px] p-3.5 shadow-none !outline-none !ring-0 data-[hover=true]:bg-surface group-data-[focus=true]:bg-surface group-data-[focus=true]:border-border",
+                            hasError && "border-red-500 group-data-[focus=true]:border-red-500",
                         ),
+                        innerWrapper: "bg-transparent !border-0 !border-none !outline-none !ring-0 shadow-none",
+                        input: "bg-transparent text-xs text-ink placeholder:text-dust !border-0 !border-none !outline-none focus:!outline-none focus-visible:!outline-none !ring-0 focus:!ring-0 !shadow-none",
                     }}
                 />
             )}
@@ -196,7 +202,7 @@ export function FormikField<T = unknown>({
                     className={cn("w-full", selectClassName)}
                     classNames={{
                         trigger: cn(
-                            "bg-white border border-neutral-150 rounded-[8px] h-[45px]",
+                            "bg-surface border border-border rounded-xl h-[45px] px-3.5 shadow-none !outline-none !ring-0",
                             selectTriggerClassName,
                         ),
                         popoverContent: cn("rounded-md", selectPopoverClassName),
