@@ -5,7 +5,7 @@ export async function PATCH(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  const authUser = getAuthenticatedUser();
+  const authUser = await getAuthenticatedUser();
   if (!authUser) {
     return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
   }
@@ -24,4 +24,5 @@ export async function PATCH(
 
   return NextResponse.json({ data: db.notifications[idx] });
 }
+
 

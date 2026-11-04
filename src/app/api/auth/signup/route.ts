@@ -1,132 +1,74 @@
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import {
-  readDb,
-  writeDb,
-  hashPassword,
-  createSession,
-  toPublicUser,
-  StoredUser,
-  isSupabaseConfigured,
-} from '@/lib/server/db';
-import { createClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server'
+import { isSupabaseConfigured } from '@/lib/server/db'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
-  let body: unknown;
-
+  let body: unknown
   try {
-    body = await request.json();
+    body = await request.json()
   } catch {
-    return NextResponse.json({ error: 'Send valid JSON.' }, { status: 400 });
+    return NextResponse.json({ error: 'Send valid JSON.' }, { status: 400 })
   }
 
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
 
-  const input = body as Record<string, unknown>;
-  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
-  const password = typeof input.password === 'string' ? input.password : '';
-  const rawName = typeof input.name === 'string' ? input.name.trim() : '';
-  const phone = typeof input.phone === 'string' && input.phone.trim() ? input.phone.trim() : undefined;
-  const country = typeof input.country === 'string' && input.country.trim() ? input.country.trim() : 'United States';
-  const countryFlag = typeof input.countryFlag === 'string' && input.countryFlag.trim() ? input.countryFlag.trim() : '🇺🇸';
-  const verificationMethod =
-    typeof input.verificationMethod === 'string' &&
-    ['linkedin', 'email', 'declaration'].includes(input.verificationMethod)
-      ? (input.verificationMethod as 'linkedin' | 'email' | 'declaration')
-      : undefined;
-  const verificationDetail =
-    typeof input.verificationDetail === 'string' && input.verificationDetail.trim()
-      ? input.verificationDetail.trim()
-      : undefined;
-  const isVetted = typeof input.isVetted === 'boolean' ? input.isVetted : Boolean(verificationMethod);
+  const input = body as Record<string, unknown>
+  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : ''
+  const password = typeof input.password === 'string' ? input.password : ''
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+  const phone = typeof input.phone === 'string' && input.phone.trim() ? input.phone.trim() : null
+  const country = typeof input.country === 'string' && input.country.trim() ? input.country.trim() : 'Nigeria'
+  const countryFlag = typeof input.countryFlag === 'string' && input.countryFlag.trim() ? input.countryFlag.trim() : '🇳🇬'
 
   if (!email || !email.includes('@') || email.length > 254) {
-    return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+    return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })
   }
-
-  if (!rawName || rawName.length < 2) {
-    return NextResponse.json({ error: 'Please enter your full name (at least 2 characters).' }, { status: 400 });
+  if (name.length < 2 || name.length > 100) {
+    return NextResponse.json({ error: 'Enter a name between 2 and 100 characters.' }, { status: 400 })
   }
-
   if (password.length < 8 || password.length > 128) {
-    return NextResponse.json(
-      { error: 'Password must be between 8 and 128 characters.' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Password must be between 8 and 128 characters.' }, { status: 400 })
+  }
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: 'Account signup is not configured yet.' }, { status: 503 })
   }
 
-  const db = readDb();
-  const existingUser = db.users.find((u) => u.email.toLowerCase() === email);
-  if (existingUser) {
-    return NextResponse.json(
-      { error: 'An account with this email already exists. Please sign in instead.' },
-      { status: 409 }
-    );
-  }
-
-  const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(rawName)}`;
-  let userId: string = crypto.randomUUID();
-
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: new URL('/auth/callback', request.url).toString(),
-          data: {
-            display_name: rawName,
-            name: rawName,
-            avatar_url: avatarUrl,
-            phone: phone || null,
-            country,
-            country_flag: countryFlag,
-            verification_method: verificationMethod || null,
-            verification_detail: verificationDetail || null,
-            is_vetted: isVetted,
-          },
-        },
-      });
-      if (!error && data.user?.id) {
-        userId = data.user.id;
-      }
-    } catch (err) {
-      console.warn('Supabase signup sync skipped:', err);
-    }
-  }
-
-  const now = new Date();
-  const newUser: StoredUser = {
-    id: userId,
-    name: rawName,
+  const supabase = createClient()
+  const redirectTo = new URL('/auth/callback?next=/dashboard', request.url).toString()
+  const { data, error } = await supabase.auth.signUp({
     email,
-    phone,
-    avatar: avatarUrl,
-    isVerified: true,
-    memberSince: now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-    successfulSplits: 0,
-    country,
-    countryFlag,
-    verificationMethod,
-    verificationDetail,
-    isVetted,
-    passwordHash: hashPassword(password),
-    createdAt: now.toISOString(),
-  };
+    password,
+    options: {
+      emailRedirectTo: redirectTo,
+      data: { display_name: name, name, phone, country, country_flag: countryFlag },
+    },
+  })
 
-  db.users.push(newUser);
-  writeDb(db);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 })
+  }
+  if (!data.user) {
+    return NextResponse.json({ error: 'Unable to create your account.' }, { status: 500 })
+  }
 
-  createSession(newUser.id);
+  // A returned session means Supabase email confirmation is disabled; do not create an unverified account session.
+  if (data.session) {
+    await supabase.auth.signOut()
+    return NextResponse.json(
+      { error: 'Email confirmation must be enabled in Supabase Auth before signup can continue.' },
+      { status: 503 },
+    )
+  }
 
   return NextResponse.json(
     {
-      message: 'Account created successfully!',
-      user: toPublicUser(newUser),
+      message: `Check ${email} for the confirmation link. You can sign in after you confirm your email.`,
+      email,
+      needsEmailVerification: true,
     },
-    { status: 201 }
-  );
+    { status: 201 },
+  )
 }
+

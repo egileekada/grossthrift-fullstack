@@ -8,7 +8,7 @@ import {
 } from '@/lib/server/db';
 
 export async function GET() {
-  const user = getAuthenticatedUser();
+  const user = await getAuthenticatedUser();
 
   if (!user) {
     return NextResponse.json({ error: 'Sign in to view your profile.' }, { status: 401 });
@@ -65,7 +65,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const authUser = getAuthenticatedUser();
+  const authUser = await getAuthenticatedUser();
   if (!authUser) {
     return NextResponse.json({ error: 'Sign in to update your profile.' }, { status: 401 });
   }
@@ -136,3 +136,4 @@ export async function PATCH(request: Request) {
     },
   });
 }
+

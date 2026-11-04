@@ -5,7 +5,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const authUser = getAuthenticatedUser();
+  const authUser = await getAuthenticatedUser();
   if (!authUser) {
     return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
   }
@@ -57,7 +57,7 @@ export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  const authUser = getAuthenticatedUser();
+  const authUser = await getAuthenticatedUser();
   if (!authUser) {
     return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
   }
@@ -115,4 +115,5 @@ export async function DELETE(
 
   return NextResponse.json({ error: 'Record not found.' }, { status: 404 });
 }
+
 

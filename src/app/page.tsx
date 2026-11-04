@@ -827,9 +827,9 @@ export default function LandingPage() {
                 <Lock size={20} className="text-ink" />
               </div>
               <div className="space-y-2">
-                <h3 className="font-sans font-semibold text-[18px] text-ink">Zero platform payments</h3>
+                <h3 className="font-sans font-semibold text-[18px] text-ink">Secure checkout, clear status</h3>
                 <p className="text-[14px] text-slate leading-[1.75] font-normal">
-                  All payments happen directly between you and your split partner. GrossThrift is just the coordination layer.
+                  Members pay through Paystack. GrossThrift records the payment, invitation, and access-confirmation steps.
                 </p>
               </div>
             </div>

@@ -156,12 +156,12 @@ export default function ListingDetailPage() {
             <div className="sm:text-right">
               <div className="flex items-baseline sm:justify-end gap-1">
                 <span className="text-3xl font-bold font-numeric-tabular text-ink dark:text-white">
-                  ${costPerPerson.toFixed(2)}
+                  ₦{costPerPerson.toFixed(2)}
                 </span>
                 <span className="text-xs text-slate dark:text-dark-muted">/month</span>
               </div>
               <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-gt-savings-bg text-gt-savings-text text-xs font-bold font-mono">
-                Save {savingsPercent}% vs Retail (${listing.totalCost.toFixed(2)})
+                Save {savingsPercent}% vs Retail (₦{listing.totalCost.toFixed(2)})
               </span>
             </div>
           </div>
@@ -240,7 +240,7 @@ export default function ListingDetailPage() {
                 }}
                 endContent={<ArrowRight size={16} />}
               >
-                {user ? `Join this Split ($${costPerPerson.toFixed(2)}/mo)` : 'Sign in to Join this Split'}
+                {user ? `Join this Split (₦${costPerPerson.toFixed(2)}/mo)` : 'Sign in to Join this Split'}
               </AppButton>
             )}
           </div>

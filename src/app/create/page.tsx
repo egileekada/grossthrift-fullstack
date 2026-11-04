@@ -62,7 +62,7 @@ export default function CreateListingPage() {
   const [description, setDescription] = useState<string>('');
 
   // Step 2 Fields
-  const [currency, setCurrency] = useState<Currency>('USD');
+  const [currency, setCurrency] = useState<Currency>('NGN');
   const [totalCost, setTotalCost] = useState<number>(16.99);
   const [slotsTotal, setSlotsTotal] = useState<number>(4);
 
@@ -120,6 +120,7 @@ export default function CreateListingPage() {
         contactMethod,
         contactValue: finalContact || user.email,
         logoEmoji: GRID_PLANS.find((p) => p.name === selectedPlan)?.emoji || '🔋',
+        hostAttested: termsAccepted,
       });
 
       if (created?.id) {
@@ -503,13 +504,8 @@ export default function CreateListingPage() {
                       <CustomField
                         as="select"
                         value={currency}
-                        options={[
-                          { label: '🇺🇸 USD', value: 'USD' },
-                          { label: '🇬🇧 GBP', value: 'GBP' },
-                          { label: '🇪🇺 EUR', value: 'EUR' },
-                          { label: '🇳🇬 NGN', value: 'NGN' },
-                        ]}
-                        onChange={(val) => setCurrency((String(val) || 'USD') as Currency)}
+                        options={[{ label: '🇳🇬 NGN', value: 'NGN' }]}
+                        onChange={(val) => setCurrency((String(val) || 'NGN') as Currency)}
                         className="w-[140px]"
                       />
 
@@ -553,7 +549,7 @@ export default function CreateListingPage() {
                     <div className="flex justify-between items-center">
                       <span className="text-[13px] text-slate font-medium">Cost per person</span>
                       <span className="text-[28px] font-bold text-gt-green font-numeric-tabular leading-none">
-                        ${costPerPerson.toFixed(2)}<span className="text-xs font-normal">/mo</span>
+                        ₦{costPerPerson.toFixed(2)}<span className="text-xs font-normal">/mo</span>
                       </span>
                     </div>
 
@@ -771,7 +767,7 @@ export default function CreateListingPage() {
                   <div>
                     <span className="text-[11px] text-dust block font-normal">per person / month</span>
                     <span className="text-[26px] font-bold tracking-tight text-ink font-numeric-tabular leading-none">
-                      ${costPerPerson.toFixed(2)}
+                      ₦{costPerPerson.toFixed(2)}
                     </span>
                   </div>
                   <span className="px-3 py-1 bg-[#f0fdf4] text-[#15803d] border border-[#bbf7d0] rounded-full text-[12px] font-semibold">

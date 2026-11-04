@@ -1,13 +1,7 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import {
-  readDb,
-  writeDb,
-  getAuthenticatedUser,
-  normalizeCategory,
-  normalizeCurrency,
-} from '@/lib/server/db';
-import { Listing } from '@/types/listing';
+import { createClient } from '@/lib/supabase/server';
+import { getAuthenticatedUser, normalizeCurrency } from '@/lib/server/db';
+import { mapDiscoveryListing } from '@/lib/server/listingMappers';
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -19,225 +13,145 @@ export async function GET(request: Request) {
   const minPrice = params.has('minPrice') ? Number(params.get('minPrice')) : undefined;
   const maxPrice = params.has('maxPrice') ? Number(params.get('maxPrice')) : undefined;
 
-  if (
-    !Number.isInteger(page) ||
-    page < 1 ||
-    !Number.isInteger(pageSize) ||
-    pageSize < 1 ||
-    pageSize > 100
-  ) {
-    return NextResponse.json(
-      { error: 'Invalid listing pagination values.' },
-      { status: 400 }
-    );
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+    return NextResponse.json({ error: 'Invalid listing pagination values.' }, { status: 400 });
   }
 
-  const db = readDb();
-  const authUser = getAuthenticatedUser();
+  const supabase = createClient();
+  let query = supabase
+    .from('listings_with_host')
+    .select('*', { count: 'exact' })
+    .eq('status', 'active')
+    .eq('visibility', 'public');
 
-  let filtered = [...db.listings];
-
-  if (category && category !== 'All') {
-    filtered = filtered.filter((l) => l.category.toLowerCase() === category.toLowerCase());
-  }
-
+  if (category && category !== 'All') query = query.ilike('service_category', category);
   if (search) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(
-      (l) =>
-        l.planName.toLowerCase().includes(q) ||
-        l.category.toLowerCase().includes(q) ||
-        l.description.toLowerCase().includes(q) ||
-        l.hostName.toLowerCase().includes(q)
-    );
+    const term = `%${search.replace(/[%_,]/g, ' ')}%`;
+    query = query.or(`service_name.ilike.${term},plan_type.ilike.${term},description.ilike.${term},host_display_name.ilike.${term}`);
+  }
+  if (minPrice !== undefined && Number.isFinite(minPrice)) query = query.gte('price_per_seat', minPrice);
+  if (maxPrice !== undefined && Number.isFinite(maxPrice)) query = query.lte('price_per_seat', maxPrice);
+
+  const orderColumn = sort === 'price_asc' || sort === 'price_desc' ? 'price_per_seat' : 'created_at';
+  const { data: rows, error, count } = await query
+    .order(orderColumn, { ascending: sort === 'price_asc' })
+    .range((page - 1) * pageSize, page * pageSize - 1);
+
+  if (error) return NextResponse.json({ error: 'Could not load listings.' }, { status: 500 });
+
+  const ids = (rows ?? []).map((row) => row.id);
+  const { data: identities } = ids.length
+    ? await supabase.from('listings').select('id, host_id, currency').in('id', ids)
+    : { data: [] };
+  const identityById = new Map((identities ?? []).map((row) => [row.id, row]));
+  const listings = (rows ?? []).map((row) => {
+    const identity = identityById.get(row.id);
+    return mapDiscoveryListing(row, { hostId: identity?.host_id, currency: identity?.currency });
+  });
+
+  const authUser = await getAuthenticatedUser();
+  let hostedIds: string[] = [];
+  let memberships: Array<{ listing_id: string; status: string }> = [];
+  if (authUser) {
+    const [hostedResult, membershipsResult] = await Promise.all([
+      supabase.from('listings').select('id').eq('host_id', authUser.id),
+      supabase.from('memberships').select('listing_id,status').eq('member_id', authUser.id),
+    ]);
+    hostedIds = (hostedResult.data ?? []).map((row) => row.id);
+    memberships = membershipsResult.data ?? [];
   }
 
-  if (minPrice !== undefined && Number.isFinite(minPrice)) {
-    filtered = filtered.filter((l) => l.totalCost / l.slotsTotal >= minPrice);
-  }
-
-  if (maxPrice !== undefined && Number.isFinite(maxPrice)) {
-    filtered = filtered.filter((l) => l.totalCost / l.slotsTotal <= maxPrice);
-  }
-
-  if (sort === 'price_asc') {
-    filtered.sort((a, b) => a.totalCost / a.slotsTotal - b.totalCost / b.slotsTotal);
-  } else if (sort === 'price_desc') {
-    filtered.sort((a, b) => b.totalCost / b.slotsTotal - a.totalCost / a.slotsTotal);
-  } else {
-    filtered.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }
-
-  const total = filtered.length;
-  const from = (page - 1) * pageSize;
-  const paginated = filtered.slice(from, from + pageSize);
-
-  // Include current user's joinedListingIds, joinRequests, and notifications if signed in
-  const hostedListingIds = authUser
-    ? db.listings.filter((l) => l.hostId === authUser.id).map((l) => l.id)
-    : [];
-
-  const userJoinRequests = authUser
-    ? db.joinRequests.filter(
-        (r) => r.userId === authUser.id || hostedListingIds.includes(r.listingId)
-      )
-    : [];
-
-  const joinedListingIds = authUser
-    ? Array.from(
-        new Set([
-          ...hostedListingIds,
-          ...db.joinRequests
-            .filter((r) => r.userId === authUser.id && r.status !== 'rejected')
-            .map((r) => r.listingId),
-        ])
-      )
-    : [];
-
-  const userNotifications = authUser
-    ? db.notifications.filter((n) => n.userId === authUser.id)
-    : [];
+  const joinedListingIds = [...new Set([
+    ...hostedIds,
+    ...memberships
+      .filter((membership) => ['pending_payment', 'paid_and_held', 'invited', 'active', 'disputed'].includes(membership.status))
+      .map((membership) => membership.listing_id),
+  ])];
 
   return NextResponse.json({
-    data: paginated,
+    data: listings,
     joinedListingIds,
-    joinRequests: userJoinRequests,
-    notifications: userNotifications,
+    joinRequests: [],
+    notifications: [],
     pagination: {
       page,
       pageSize,
-      total,
-      totalPages: Math.ceil(total / pageSize),
+      total: count ?? listings.length,
+      totalPages: Math.ceil((count ?? listings.length) / pageSize),
     },
   });
 }
 
 export async function POST(request: Request) {
-  const authUser = getAuthenticatedUser();
+  const authUser = await getAuthenticatedUser();
+  if (!authUser) return NextResponse.json({ error: 'Please verify your email and sign in before creating a listing.' }, { status: 401 });
 
-  if (!authUser) {
-    return NextResponse.json(
-      { error: 'Please sign in before creating a listing.' },
-      { status: 401 }
-    );
-  }
-
-  let body: unknown;
+  let input: Record<string, unknown>;
   try {
-    body = await request.json();
+    input = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
   }
 
-  if (typeof body !== 'object' || body === null) {
-    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
-  }
+  const planName = typeof input.planName === 'string' ? input.planName.trim() : '';
+  const totalCost = Number(input.totalCost ?? 0);
+  const seatsTotal = Number(input.slotsTotal ?? 0);
+  const currency = normalizeCurrency(typeof input.currency === 'string' ? input.currency : undefined);
+  if (!planName) return NextResponse.json({ error: 'Please provide a subscription plan name.' }, { status: 400 });
+  if (!Number.isFinite(totalCost) || totalCost <= 0) return NextResponse.json({ error: 'Total cost must be greater than 0.' }, { status: 400 });
+  if (!Number.isInteger(seatsTotal) || seatsTotal < 2 || seatsTotal > 20) return NextResponse.json({ error: 'Number of people splitting must be between 2 and 20.' }, { status: 400 });
+  if (currency !== 'NGN') return NextResponse.json({ error: 'The MVP currently creates listings in NGN only.' }, { status: 400 });
+  if (input.hostAttested !== true) return NextResponse.json({ error: 'Please accept the listing and sharing terms.' }, { status: 400 });
 
-  const input = body as Record<string, unknown>;
-  const planName =
-    typeof input.planName === 'string' && input.planName.trim()
-      ? input.planName.trim()
-      : typeof input.plan_type === 'string' && input.plan_type.trim()
-        ? input.plan_type.trim()
-        : '';
+  const supabase = createClient();
+  const { data: services, error: servicesError } = await supabase
+    .from('services')
+    .select('id,name')
+    .eq('is_active', true);
+  if (servicesError) return NextResponse.json({ error: 'Could not verify the selected service.' }, { status: 500 });
 
-  const totalCost = Number(input.totalCost ?? input.total_cost ?? 0);
-  const slotsTotal = Number(input.slotsTotal ?? input.seats_total ?? 0);
-  const category = normalizeCategory(
-    typeof input.category === 'string' ? input.category : undefined
-  );
-  const currency = normalizeCurrency(
-    typeof input.currency === 'string' ? input.currency : undefined
-  );
-  const description =
-    typeof input.description === 'string' && input.description.trim()
-      ? input.description.trim()
-      : `Shared co-buying group for ${planName} hosted by ${authUser.name}.`;
-  const contactMethod =
-    input.contactMethod === 'Email' ? 'Email' : 'WhatsApp';
-  const contactValue =
-    typeof input.contactValue === 'string' && input.contactValue.trim()
-      ? input.contactValue.trim()
-      : authUser.phone || authUser.email;
-  const logoEmoji =
-    typeof input.logoEmoji === 'string' ? input.logoEmoji : undefined;
-  const rules =
-    typeof input.rules === 'string' && input.rules.trim()
-      ? input.rules.trim()
-      : 'Respect your assigned profile slot and keep monthly renewals on time.';
-  const billingCycle =
-    typeof input.billingCycle === 'string'
-      ? input.billingCycle
-      : typeof input.billing_cycle === 'string'
-        ? input.billing_cycle
-        : 'monthly';
-  const serviceId =
-    typeof input.serviceId === 'string'
-      ? input.serviceId
-      : typeof input.service_id === 'string'
-        ? input.service_id
-        : undefined;
+  const normalizedPlan = planName.toLowerCase();
+  const service = (services ?? []).find((item) => {
+    const normalizedName = item.name.toLowerCase();
+    return normalizedPlan === normalizedName || normalizedPlan.startsWith(`${normalizedName} `);
+  });
+  if (!service) return NextResponse.json({ error: 'Choose one of the active services in the catalog.' }, { status: 400 });
 
-  if (!planName) {
-    return NextResponse.json(
-      { error: 'Please provide a subscription plan name.' },
-      { status: 400 }
-    );
-  }
+  const description = typeof input.description === 'string' ? input.description.trim() : '';
+  const rules = typeof input.rules === 'string' ? input.rules.trim() : '';
+  const billingCycle = typeof input.billingCycle === 'string' ? input.billingCycle : 'monthly';
+  const { data: created, error: insertError } = await supabase
+    .from('listings')
+    .insert({
+      host_type: 'community',
+      host_id: authUser.id,
+      service_id: service.id,
+      plan_type: planName,
+      total_cost: totalCost,
+      billing_cycle: billingCycle,
+      seats_total: seatsTotal,
+      seats_open: seatsTotal - 1,
+      price_per_seat: Number((totalCost / seatsTotal).toFixed(2)),
+      currency,
+      description: description || `Shared subscription group for ${planName}.`,
+      rules,
+      status: 'active',
+      visibility: 'public',
+      host_attested: true,
+    })
+    .select('id,host_id,currency')
+    .single();
 
-  if (!Number.isFinite(totalCost) || totalCost <= 0) {
-    return NextResponse.json(
-      { error: 'Total cost must be greater than 0.' },
-      { status: 400 }
-    );
-  }
+  if (insertError || !created) return NextResponse.json({ error: 'Could not create the listing.' }, { status: 500 });
 
-  if (!Number.isInteger(slotsTotal) || slotsTotal < 2 || slotsTotal > 20) {
-    return NextResponse.json(
-      { error: 'Number of people splitting must be between 2 and 20.' },
-      { status: 400 }
-    );
-  }
+  const { data: row, error: readError } = await supabase
+    .from('listings_with_host')
+    .select('*')
+    .eq('id', created.id)
+    .single();
+  if (readError || !row) return NextResponse.json({ error: 'Listing was created, but could not be loaded.' }, { status: 500 });
 
-  const db = readDb();
-  const now = new Date().toISOString();
-
-  const newListing: Listing = {
-    id: crypto.randomUUID(),
-    planName,
-    category,
-    totalCost,
-    slotsTotal,
-    slotsFilled: 1,
-    currency,
-    description,
-    contactMethod,
-    contactValue,
-    logoEmoji,
-    hostId: authUser.id,
-    hostName: authUser.name,
-    hostAvatar: authUser.avatar,
-    hostVerified: Boolean(authUser.isVerified),
-    hostJoined: authUser.memberSince || 'Oct 2026',
-    hostSuccessfulSplits: (authUser.successfulSplits || 0) + 1,
-    createdAt: now,
-    country: authUser.country || 'United States',
-    countryFlag: authUser.countryFlag || '🇺🇸',
-    rules,
-    billingCycle,
-    serviceId,
-  };
-
-  db.listings.unshift(newListing);
-
-  const userIdx = db.users.findIndex((u) => u.id === authUser.id);
-  if (userIdx !== -1) {
-    db.users[userIdx].successfulSplits = (db.users[userIdx].successfulSplits || 0) + 1;
-  }
-
-  writeDb(db);
-
-  return NextResponse.json({ data: newListing }, { status: 201 });
+  return NextResponse.json({
+    data: mapDiscoveryListing(row, { hostId: created.host_id, currency: created.currency }),
+  }, { status: 201 });
 }

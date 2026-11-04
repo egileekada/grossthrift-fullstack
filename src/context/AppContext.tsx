@@ -162,34 +162,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       userEmail,
       userPhone,
     });
-
-    const { listing: updatedListing, joinRequest, notification } = res.data;
-
-    setListings((prev) => {
-      const updated = prev.map((l) => (l.id === updatedListing.id ? updatedListing : l));
-      saveStoredListings(updated);
-      return updated;
-    });
-
-    setJoinRequests((prev) => {
-      const updated = [joinRequest, ...prev.filter((r) => r.id !== joinRequest.id)];
-      saveStoredJoinRequests(updated);
-      return updated;
-    });
-
-    setJoinedListingIds((prev) => {
-      const updated = prev.includes(listingId) ? prev : [...prev, listingId];
-      saveStoredJoinedIds(updated);
-      return updated;
-    });
-
-    if (notification) {
-      setNotifications((prev) => {
-        const updated = [notification, ...prev.filter((n) => n.id !== notification.id)];
-        saveStoredNotifications(updated);
-        return updated;
-      });
-    }
+    if (!res.data.authorizationUrl) throw new Error('Paystack did not return a checkout link.');
+    window.location.assign(res.data.authorizationUrl);
   };
 
   const handleMarkNotifAsRead = async (id: string) => {
