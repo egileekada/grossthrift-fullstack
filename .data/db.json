@@ -15,6 +15,22 @@
       "createdAt": "2026-10-28T15:39:19.498Z",
       "verificationMethod": "linkedin",
       "verificationDetail": "https://linkedin.com/in/dax"
+    },
+    {
+      "id": "627fb10a-753e-46a9-92c4-f7f6de0f0453",
+      "name": "Miracle Pepple",
+      "email": "miracle4424@gmail.com",
+      "avatar": "",
+      "isVerified": true,
+      "memberSince": "Oct 2026",
+      "successfulSplits": 0,
+      "country": "Nigeria",
+      "countryFlag": "🇳🇬",
+      "isVetted": true,
+      "passwordHash": "",
+      "createdAt": "2026-10-31T13:21:57.787544Z",
+      "verificationMethod": "declaration",
+      "verificationDetail": "Self-Attested Declaration"
     }
   ],
   "sessions": [],

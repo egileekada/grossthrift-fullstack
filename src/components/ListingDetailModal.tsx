@@ -9,7 +9,6 @@ import {
   ArrowLeft,
   Lock,
   Unlock,
-  CreditCard,
   Sparkles,
   AlertCircle,
 } from 'lucide-react';
@@ -67,20 +66,12 @@ export default function ListingDetailModal({
   onConfirmJoin,
 }: ListingDetailModalProps) {
   const [joinStep, setJoinStep] = useState<'details' | 'checkout' | 'processing' | 'success'>('details');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [cardName, setCardName] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setJoinStep('details');
       setError('');
-      setCardNumber('');
-      setCardExpiry('');
-      setCardCvv('');
-      setCardName(user ? user.name : '');
     }
   }, [isOpen, user]);
 
@@ -104,61 +95,17 @@ export default function ListingDetailModal({
     setJoinStep('checkout');
   };
 
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = (matches && matches[0]) || '';
-    const parts = [];
-
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-
-    if (parts.length > 0) {
-      return parts.join(' ');
-    } else {
-      return v;
-    }
-  };
-
-  const formatExpiry = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    if (v.length >= 2) {
-      return `${v.slice(0, 2)}/${v.slice(2, 4)}`;
-    }
-    return v;
-  };
-
-  const handleCheckoutSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cardNumber || cardNumber.replace(/\s/g, '').length < 16) {
-      setError('Please enter a valid 16-digit card number.');
-      return;
-    }
-    if (!cardExpiry || cardExpiry.length < 5) {
-      setError('Please enter a valid expiry date (MM/YY).');
-      return;
-    }
-    if (!cardCvv || cardCvv.length < 3) {
-      setError('Please enter a valid 3-digit CVV.');
-      return;
-    }
-    if (!cardName.trim()) {
-      setError('Please enter the cardholder name.');
-      return;
-    }
-
+  const handleCheckoutSubmit = async () => {
     setError('');
     setJoinStep('processing');
 
     try {
       await onConfirmJoin(
         listing.id,
-        user?.name || cardName.trim(),
+        user?.name || '',
         user?.email || '',
         user?.phone || user?.email || ''
       );
-      setJoinStep('success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unable to join this split.';
       setError(msg);
@@ -242,7 +189,7 @@ export default function ListingDetailModal({
                       Your Split Portion
                     </span>
                     <span className="font-display font-semibold text-2xl text-gt-green block mt-1">
-                      ${costPerPerson}
+                      ₦{Number(costPerPerson).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                       <span className="text-xs font-mono font-bold text-slate">/mo</span>
                     </span>
                   </div>
@@ -252,7 +199,7 @@ export default function ListingDetailModal({
                       Full Retail Cost
                     </span>
                     <span className="font-display font-semibold text-dust line-through text-sm mt-1">
-                      ${listing.totalCost.toFixed(2)}/mo
+                      ₦{listing.totalCost.toLocaleString('en-NG', { minimumFractionDigits: 2 })}/mo
                     </span>
                   </div>
                 </div>
@@ -310,34 +257,27 @@ export default function ListingDetailModal({
                     {!isHost && !isFull && <ArrowRight size={13} />}
                   </button>
                   <p className="text-[10px] text-center text-dust mt-2.5 font-sans">
-                    No lock-in contracts. Secure monthly billing powered by Stripe. Cancel anytime.
+                    You will pay through Paystack checkout. Access is not activated until payment is confirmed.
                   </p>
                 </div>
               </motion.div>
             )}
 
-            {/* Step 2: Stripe Checkout Credit Card Form */}
+            {/* Step 2: Paystack hosted checkout */}
             {joinStep === 'checkout' && (
-              <motion.form
+              <motion.div
                 key="checkout"
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                onSubmit={handleCheckoutSubmit}
                 className="space-y-5 text-left"
               >
                 <div className="pb-2 border-b border-dashed border-border">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-display font-semibold text-sm uppercase tracking-wider text-gt-green flex items-center gap-1.5">
-                      <CreditCard size={15} />
-                      Stripe Checkout
-                    </h3>
-                    <span className="text-[11px] font-mono font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200">
-                      ${costPerPerson}/mo
-                    </span>
-                  </div>
+                  <h3 className="font-display font-semibold text-sm uppercase tracking-wider text-gt-green">
+                    Pay securely with Paystack
+                  </h3>
                   <p className="text-[10.5px] text-slate mt-1 leading-relaxed">
-                    Recurring monthly subscription. Powering secure pool assignment.
+                    Your payment details are entered on Paystack. GrossThrift does not collect your card details.
                   </p>
                 </div>
 
@@ -348,94 +288,35 @@ export default function ListingDetailModal({
                   </div>
                 )}
 
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="card-number"
-                      className="text-[9px] font-mono font-bold text-dust uppercase tracking-wider block"
-                    >
-                      Card Number
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        id="card-number"
-                        maxLength={19}
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                        placeholder="4242 4242 4242 4242"
-                        className="w-full bg-surface border border-border rounded-xl pl-4 pr-10 py-3 outline-none focus:bg-white focus:ring-1 focus:ring-gt-green/20 focus:border-gt-green transition-all text-xs font-mono font-bold text-ink shadow-xs"
-                        required
-                      />
-                      <Lock size={12} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-dust" />
-                    </div>
+                <div className="bg-surface rounded-2xl p-4 space-y-3 border border-border text-xs">
+                  <div className="flex justify-between text-slate">
+                    <span>Seat price</span>
+                    <span>₦{Number(costPerPerson).toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="card-expiry"
-                        className="text-[9px] font-mono font-bold text-dust uppercase tracking-wider block"
-                      >
-                        Expires (MM/YY)
-                      </label>
-                      <input
-                        type="text"
-                        id="card-expiry"
-                        maxLength={5}
-                        value={cardExpiry}
-                        onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
-                        placeholder="12/28"
-                        className="w-full bg-surface border border-border rounded-xl px-4 py-3 outline-none focus:bg-white focus:ring-1 focus:ring-gt-green/20 focus:border-gt-green transition-all text-xs font-mono font-bold text-ink shadow-xs"
-                        required
-                      />
+                  {listing.platformFeeAmount !== undefined && (
+                    <div className="flex justify-between text-slate">
+                      <span>GrossThrift fee ({listing.platformFeePercent}%)</span>
+                      <span>₦{listing.platformFeeAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })}</span>
                     </div>
-
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="card-cvv"
-                        className="text-[9px] font-mono font-bold text-dust uppercase tracking-wider block"
-                      >
-                        CVV / CVC
-                      </label>
-                      <input
-                        type="password"
-                        id="card-cvv"
-                        maxLength={3}
-                        value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="***"
-                        className="w-full bg-surface border border-border rounded-xl px-4 py-3 outline-none focus:bg-white focus:ring-1 focus:ring-gt-green/20 focus:border-gt-green transition-all text-xs font-mono font-bold text-ink shadow-xs"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="card-name"
-                      className="text-[9px] font-mono font-bold text-dust uppercase tracking-wider block"
-                    >
-                      Cardholder Name
-                    </label>
-                    <input
-                      type="text"
-                      id="card-name"
-                      value={cardName}
-                      onChange={(e) => setCardName(e.target.value)}
-                      placeholder="e.g. Sarah Connor"
-                      className="w-full bg-surface border border-border rounded-xl px-4 py-3 outline-none focus:bg-white focus:ring-1 focus:ring-gt-green/20 focus:border-gt-green transition-all text-xs font-bold text-ink shadow-xs"
-                      required
-                    />
+                  )}
+                  <div className="flex justify-between border-t border-border pt-3 font-bold text-ink">
+                    <span>Total due</span>
+                    <span>
+                      {listing.checkoutTotal === undefined
+                        ? 'Fee setup required'
+                        : `₦${listing.checkoutTotal.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-[10px] text-slate bg-surface p-3 rounded-xl border border-border">
-                  <ShieldCheck size={14} className="text-slate shrink-0" />
-                  <span>Stripe Secure TLS 256-bit encryption. Payment coordinates never touch our servers.</span>
-                </div>
+                {listing.currency !== 'NGN' && (
+                  <p className="text-xs text-rose-700">Paystack checkout is currently available for NGN listings only.</p>
+                )}
+                {listing.checkoutTotal === undefined && (
+                  <p className="text-xs text-rose-700">Checkout will be available after the project owner sets the platform fee.</p>
+                )}
 
-                <div className="flex gap-3 pt-3">
+                <div className="flex gap-3 pt-1">
                   <button
                     type="button"
                     onClick={() => setJoinStep('details')}
@@ -445,17 +326,18 @@ export default function ListingDetailModal({
                     <span>Back</span>
                   </button>
                   <button
-                    type="submit"
-                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-3 bg-charcoal text-white dark:text-[#141c17] font-semibold rounded-xl text-xs shadow-xs cursor-pointer"
-                    id="submit-contact-info-btn"
+                    type="button"
+                    onClick={handleCheckoutSubmit}
+                    disabled={listing.currency !== 'NGN' || listing.checkoutTotal === undefined}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-3 bg-charcoal text-white dark:text-[#141c17] font-semibold rounded-xl text-xs shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    id="submit-paystack-checkout-btn"
                   >
-                    <span>Start Pool Plan</span>
+                    <span>Continue to Paystack</span>
                     <ArrowRight size={13} />
                   </button>
                 </div>
-              </motion.form>
+              </motion.div>
             )}
-
             {/* Step 3: Spinning/Processing payment loader */}
             {joinStep === 'processing' && (
               <motion.div
@@ -473,7 +355,7 @@ export default function ListingDetailModal({
                     Reserving Your Split Seat
                   </h4>
                   <p className="text-xs text-dust max-w-xs mx-auto">
-                    Confirming seat availability &amp; registering your membership...
+                    Preparing your secure Paystack checkout...
                   </p>
                 </div>
               </motion.div>

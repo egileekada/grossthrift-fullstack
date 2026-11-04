@@ -245,7 +245,7 @@ function BrowseContent() {
             )}
             {selectedMaxPrice !== null && (
               <span className="bg-white border border-border rounded-full px-3 py-1 text-[12px] font-semibold text-ink flex items-center gap-1.5">
-                Max Price: ${selectedMaxPrice}/mo
+                Max Price: ₦{selectedMaxPrice}/mo
                 <button onClick={() => setSelectedMaxPrice(null)} className="text-dust hover:text-gt-red font-bold text-[10px] ml-1">×</button>
               </span>
             )}

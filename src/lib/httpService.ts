@@ -97,6 +97,8 @@ export interface SignupPayload {
 export interface SignupResponse {
   message: string;
   user?: User;
+  email?: string;
+  needsEmailVerification?: boolean;
 }
 
 export interface OnboardingProfilePayload {
@@ -228,9 +230,14 @@ export interface JoinListingPayload {
 
 export interface JoinListingResponse {
   data: {
-    listing: Listing;
-    joinRequest: JoinRequest;
-    notification: AppNotification;
+    authorizationUrl: string;
+    reference: string;
+    membershipId: string;
+    currency: 'NGN';
+    seatAmountMinor: number;
+    feeAmountMinor: number;
+    amountMinor: number;
+    feePercent: number;
   };
 }
 
@@ -266,3 +273,4 @@ export const listingsApi = {
 };
 
 export default httpService;
+

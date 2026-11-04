@@ -45,14 +45,14 @@ export default function SignupPage() {
         countryFlag: selectedCountry.flag,
       });
 
-      if (res.user) {
-        setUser(res.user);
+      if (res.needsEmailVerification) {
+        setServerSuccess(res.message);
+        return;
       }
 
-      setServerSuccess(res.message || 'Account created! Redirecting to your dashboard...');
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 900);
+      if (res.user) setUser(res.user);
+      setServerSuccess(res.message || 'Account created successfully.');
+      router.push('/dashboard');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unable to submit signup request';
       setServerError(msg);
@@ -174,3 +174,4 @@ export default function SignupPage() {
     </div>
   );
 }
+

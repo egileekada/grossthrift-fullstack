@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
+import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import {
   Listing,
@@ -372,44 +373,57 @@ export function clearSession(): void {
   }
 }
 
-export function getAuthenticatedUser(): StoredUser | null {
+export async function getAuthenticatedUser(): Promise<StoredUser | null> {
+  if (!isSupabaseConfigured()) return null;
+
   try {
-    const cookieStore = cookies();
-    const rawCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    if (!rawCookie) return null;
+    const supabase = createClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user || !user.email_confirmed_at || !user.email) return null;
 
     const db = readDb();
-    const now = Date.now();
+    const existingIndex = db.users.findIndex(
+      (item) => item.id === user.id || item.email.toLowerCase() === user.email!.toLowerCase(),
+    );
+    const existing = existingIndex >= 0 ? db.users[existingIndex] : undefined;
+    const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const name =
+      existing?.name ||
+      (typeof metadata.display_name === 'string' && metadata.display_name.trim()) ||
+      (typeof metadata.name === 'string' && metadata.name.trim()) ||
+      user.email.split('@')[0];
+    const createdAt = user.created_at || new Date().toISOString();
+    const userRecord: StoredUser = {
+      id: user.id,
+      name,
+      email: user.email,
+      phone: existing?.phone || (typeof metadata.phone === 'string' ? metadata.phone : undefined),
+      avatar: existing?.avatar || (typeof metadata.avatar_url === 'string' ? metadata.avatar_url : ''),
+      isVerified: true,
+      memberSince: existing?.memberSince || new Date(createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      successfulSplits: existing?.successfulSplits ?? 0,
+      country: existing?.country || (typeof metadata.country === 'string' ? metadata.country : 'Nigeria'),
+      countryFlag: existing?.countryFlag || (typeof metadata.country_flag === 'string' ? metadata.country_flag : '🇳🇬'),
+      verificationMethod: existing?.verificationMethod,
+      verificationDetail: existing?.verificationDetail,
+      isVetted: existing?.isVetted ?? false,
+      passwordHash: existing?.passwordHash || '',
+      createdAt: existing?.createdAt || createdAt,
+    };
 
-    // 1. Check signed stateless session token (works across serverless instances on Vercel)
-    const signed = verifySignedPayload<SignedSessionPayload>(rawCookie);
-    if (signed && new Date(signed.expiresAt).getTime() > now && signed.user?.id) {
-      let existingUser = db.users.find(
-        (u) =>
-          u.id === signed.user.id ||
-          u.email.toLowerCase() === signed.user.email.toLowerCase()
-      );
-      if (!existingUser) {
-        existingUser = signed.user;
-        db.users.push(existingUser);
-        writeDb(db);
-      }
-      return existingUser;
+    if (!existing) {
+      db.users.push(userRecord);
+      writeDb(db);
+    } else if (existing.id !== user.id || !existing.isVerified || existing.email !== user.email) {
+      db.users[existingIndex] = { ...existing, id: user.id, email: user.email, isVerified: true };
+      writeDb(db);
     }
 
-    // 2. Fallback to plain token lookup in db.sessions
-    const session = db.sessions.find(
-      (s) => s.token === rawCookie && new Date(s.expiresAt).getTime() > now
-    );
-    if (!session) return null;
-
-    const user = db.users.find((u) => u.id === session.userId);
-    return user || null;
+    return userRecord;
   } catch {
     return null;
   }
 }
-
 export function saveOtpChallenge(phone: string, code: string, expiresAt: string): void {
   const db = readDb();
   db.otpCodes = db.otpCodes.filter((item) => item.phone !== phone);
@@ -567,5 +581,6 @@ export function normalizeCurrency(cur?: string): Currency {
   if (cur && valid.includes(cur as Currency)) {
     return cur as Currency;
   }
-  return 'USD';
+  return 'NGN';
 }
+

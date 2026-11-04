@@ -63,7 +63,7 @@ export async function POST(request: Request) {
   }
 
   // Flow 2: Authenticated user updating their own password
-  const authUser = getAuthenticatedUser();
+  const authUser = await getAuthenticatedUser();
   if (!authUser) {
     return NextResponse.json(
       { error: 'Provide your reset code or sign in before setting a new password.' },
@@ -94,3 +94,4 @@ export async function POST(request: Request) {
     user: toPublicUser(db.users[userIdx]),
   });
 }
+
