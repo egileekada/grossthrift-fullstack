@@ -23,7 +23,12 @@ const CATEGORIES: ('All' | Category | 'Security')[] = [
   'Security',
 ];
 
-type SortOption = 'Newest first' | 'Price low-high' | 'Price high-low' | 'Most slots';
+type SortOption =
+  | 'Newest first'
+  | 'Price low-high'
+  | 'Price high-low'
+  | 'Most slots'
+  | 'Top rated hosts';
 
 function BrowseContent() {
   const router = useRouter();
@@ -51,6 +56,7 @@ function BrowseContent() {
   const [selectedSlots, setSelectedSlots] = useState<'Any' | '1' | '2+'>('Any');
   const [selectedMaxPrice, setSelectedMaxPrice] = useState<number | null>(null);
   const [selectedVerification, setSelectedVerification] = useState<boolean>(false);
+  const [selectedHostType, setSelectedHostType] = useState<'all' | 'official' | 'community'>('all');
 
   useEffect(() => {
     const q = searchParams?.get('q') || searchParams?.get('search');
@@ -69,7 +75,8 @@ function BrowseContent() {
     filterText.trim() !== '' ||
     selectedSlots !== 'Any' ||
     selectedMaxPrice !== null ||
-    selectedVerification;
+    selectedVerification ||
+    selectedHostType !== 'all';
 
   const handleClearAllFilters = () => {
     setSelectedCategory('All');
@@ -77,12 +84,20 @@ function BrowseContent() {
     setSelectedSlots('Any');
     setSelectedMaxPrice(null);
     setSelectedVerification(false);
+    setSelectedHostType('all');
     setSortBy('Newest first');
   };
 
   // Filter listings based on categories, search, slot availability, max price, and host verification
   const filteredListings = useMemo(() => {
-    let result = [...listings];
+    let result = listings.filter((l) => l.visibility !== 'private');
+
+    // Host Type Filter (PRD F-16)
+    if (selectedHostType === 'official') {
+      result = result.filter((listing) => listing.hostType === 'official');
+    } else if (selectedHostType === 'community') {
+      result = result.filter((listing) => listing.hostType !== 'official');
+    }
 
     // Category Filter
     if (selectedCategory !== 'All') {
@@ -126,10 +141,21 @@ function BrowseContent() {
       result.sort((a, b) => b.totalCost / b.slotsTotal - a.totalCost / a.slotsTotal);
     } else if (sortBy === 'Most slots') {
       result.sort((a, b) => b.slotsTotal - b.slotsFilled - (a.slotsTotal - a.slotsFilled));
+    } else if (sortBy === 'Top rated hosts') {
+      result.sort((a, b) => (b.hostSuccessfulSplits ?? 0) - (a.hostSuccessfulSplits ?? 0));
     }
 
     return result;
-  }, [listings, selectedCategory, filterText, sortBy, selectedSlots, selectedMaxPrice, selectedVerification]);
+  }, [
+    listings,
+    selectedCategory,
+    filterText,
+    sortBy,
+    selectedSlots,
+    selectedMaxPrice,
+    selectedVerification,
+    selectedHostType,
+  ]);
 
   const activeCount = filteredListings.length;
 
@@ -269,11 +295,35 @@ function BrowseContent() {
       {/* MAIN LISTINGS GRID */}
       <main className="px-6 sm:px-12 py-[20px]">
         <div className="max-w-[1120px] mx-auto">
-          {/* Active count badge & Sort select */}
+          {/* Active count badge, Host Type filter & Sort select */}
           <div className="flex items-center justify-between mb-6 px-1 flex-wrap gap-3 border-b border-border/60 pb-4">
-            <span className="text-[14px] text-slate font-medium">
-              Showing <strong className="text-ink font-semibold">{activeCount}</strong> available splits
-            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-[14px] text-slate font-medium">
+                Showing <strong className="text-ink font-semibold">{activeCount}</strong> available splits
+              </span>
+
+              <div className="inline-flex items-center bg-white border border-border rounded-full p-0.5 text-[11px] font-semibold">
+                {(['all', 'official', 'community'] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setSelectedHostType(type)}
+                    className={`px-3 py-1 rounded-full cursor-pointer transition-colors ${
+                      selectedHostType === type
+                        ? 'bg-charcoal text-white dark:text-[#141c17]'
+                        : 'text-slate hover:text-ink'
+                    }`}
+                  >
+                    {type === 'all'
+                      ? 'All Hosts'
+                      : type === 'official'
+                        ? 'Official GrossThrift'
+                        : 'Community Hosts'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <span className="text-[12px] text-slate font-semibold">Sort by:</span>
               <select
@@ -285,6 +335,7 @@ function BrowseContent() {
                 <option value="Price low-high">Price low-high</option>
                 <option value="Price high-low">Price high-low</option>
                 <option value="Most slots">Most slots</option>
+                <option value="Top rated hosts">Top rated hosts</option>
               </select>
             </div>
           </div>

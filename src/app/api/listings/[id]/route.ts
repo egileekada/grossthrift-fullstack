@@ -38,6 +38,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const updates: Record<string, unknown> = {};
   if (typeof body.description === 'string') updates.description = body.description.trim();
   if (typeof body.rules === 'string') updates.rules = body.rules.trim();
+  if (body.visibility === 'public' || body.visibility === 'private') {
+    updates.visibility = body.visibility;
+  }
+  if (body.status === 'cancelled' || body.status === 'active') {
+    updates.status = body.status;
+  }
   if (typeof body.totalCost === 'number' && body.totalCost > 0) {
     updates.total_cost = body.totalCost;
     updates.price_per_seat = Number((body.totalCost / current.seats_total).toFixed(2));

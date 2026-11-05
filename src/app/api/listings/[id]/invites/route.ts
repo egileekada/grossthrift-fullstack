@@ -2,6 +2,35 @@ import { createHash, randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } },
+) {
+  const listingId = params.id
+  const supabase = createClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Sign in first' }, { status: 401 })
+  }
+
+  const { data: invites, error } = await supabase
+    .from('invites')
+    .select('id, listing_id, status, expires_at, max_uses, use_count, created_at, revoked_at')
+    .eq('listing_id', listingId)
+    .eq('invited_by', user.id)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    return NextResponse.json({ error: 'Unable to load invite links' }, { status: 500 })
+  }
+
+  return NextResponse.json({ data: invites ?? [] }, { headers: { 'Cache-Control': 'no-store' } })
+}
+
 export async function POST(
   request: Request,
   { params }: { params: { id: string } },
@@ -67,11 +96,19 @@ export async function POST(
     return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
   }
 
-  if (listing.visibility !== 'private' || !['active', 'full'].includes(listing.status)) {
+  if (!['active', 'full'].includes(listing.status)) {
     return NextResponse.json(
-      { error: 'Invite links can only be created for active private listings' },
+      { error: 'Invite links can only be created for active listings' },
       { status: 409 },
     )
+  }
+
+  if (listing.visibility !== 'private') {
+    await supabase
+      .from('listings')
+      .update({ visibility: 'private' })
+      .eq('id', listingId)
+      .eq('host_id', user.id)
   }
 
   if (maxUses > listing.seats_open) {

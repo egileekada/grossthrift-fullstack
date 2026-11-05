@@ -76,6 +76,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
   const [generatedOtp, setGeneratedOtp] = useState<string>('');
   const [countdown, setCountdown] = useState(59);
   const [error, setError] = useState('');
+  const [successNotice, setSuccessNotice] = useState('');
 
   // Temp user profile storage before finishing onboarding
   const [tempUser, setTempUser] = useState<User | null>(null);
@@ -143,6 +144,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
 
   const handleEmailSignup = async (values: ModalSignupFormValues) => {
     setError('');
+    setSuccessNotice('');
     try {
       const res = await signupMutation.mutateAsync({
         name: values.name.trim(),
@@ -155,6 +157,11 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         setTempUser(res.user);
         setMethod('onboarding');
         setOnboardingStep(1);
+      } else if (res.needsEmailVerification || res.message) {
+        setSuccessNotice(
+          res.message || 'Check your email for the confirmation link before signing in.'
+        );
+        setEmailMode('login');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create account. Please try again.');
@@ -461,6 +468,12 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                   </div>
                 )}
 
+                {successNotice && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold font-sans">
+                    {successNotice}
+                  </div>
+                )}
+
                 {emailMode === 'login' ? (
                   <Formik
                     key="email-login-formik"
@@ -598,6 +611,12 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                   </div>
                 )}
 
+                {successNotice && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold font-sans">
+                    {successNotice}
+                  </div>
+                )}
+
                 <Formik
                   initialValues={{ phone }}
                   validationSchema={phoneLoginSchema}
@@ -667,6 +686,12 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                 {error && (
                   <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold font-sans">
                     {error}
+                  </div>
+                )}
+
+                {successNotice && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold font-sans">
+                    {successNotice}
                   </div>
                 )}
 

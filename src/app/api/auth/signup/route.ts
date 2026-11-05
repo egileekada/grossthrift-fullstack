@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
-import { isSupabaseConfigured } from '@/lib/server/db'
+import {
+  ensureUserProfile,
+  getAuthenticatedUser,
+  isSupabaseConfigured,
+  toPublicUser,
+} from '@/lib/server/db'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
@@ -53,13 +58,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unable to create your account.' }, { status: 500 })
   }
 
-  // A returned session means Supabase email confirmation is disabled; do not create an unverified account session.
+  await ensureUserProfile({
+    id: data.user.id,
+    name,
+    avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+  })
+
   if (data.session) {
-    await supabase.auth.signOut()
-    return NextResponse.json(
-      { error: 'Email confirmation must be enabled in Supabase Auth before signup can continue.' },
-      { status: 503 },
-    )
+    const user = await getAuthenticatedUser()
+    if (user) {
+      return NextResponse.json(
+        {
+          message: 'Account created successfully.',
+          user: toPublicUser(user),
+          email,
+          needsEmailVerification: false,
+        },
+        { status: 201 },
+      )
+    }
   }
 
   return NextResponse.json(

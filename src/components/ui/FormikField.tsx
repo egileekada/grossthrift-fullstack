@@ -179,6 +179,7 @@ export function FormikField<T = unknown>({
             {as === "select" && (
                 <Select
                     aria-label={accessibleLabel}
+                    disallowEmptySelection={!multiple}
                     selectedKeys={
                         multiple
                             ? new Set(Array.isArray(inputValue) ? (inputValue as string[]) : [])
@@ -192,7 +193,9 @@ export function FormikField<T = unknown>({
                             await setFieldValue(name, selected, true);
                         } else {
                             const selected = Array.from(keys)[0];
-                            await setFieldValue(name, selected ? String(selected) : "", true);
+                            if (selected !== undefined) {
+                                await setFieldValue(name, String(selected), true);
+                            }
                         }
                         await setFieldTouched(name, true, true);
                     }}

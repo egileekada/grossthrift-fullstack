@@ -8,11 +8,14 @@ import confetti from 'canvas-confetti';
 import {
   Check,
   Copy,
+  Globe,
+  Lock,
   Plus,
   ShieldCheck,
 } from 'lucide-react';
-import { Category, Currency } from '@/types/listing';
+import { Category, Currency, ServiceCatalogItem } from '@/types/listing';
 import { useApp } from '@/context/AppContext';
+import { fetchServicesCatalog } from '@/lib/api';
 import {
   CustomField,
   CustomText,
@@ -24,18 +27,18 @@ import NotificationBar from '@/components/NotificationBar';
 import AuthModal from '@/components/AuthModal';
 import PlanIcon from '@/components/PlanIcon';
 
-// 10 plans for the step 1 card grid selector as specified
+// Launch plans aligned with the GrossThrift PRD service catalog (NGN pricing)
 const GRID_PLANS = [
-  { name: 'YouTube Premium', emoji: '🎬', category: 'Streaming' as Category, typicalCost: 22.99 },
-  { name: 'Spotify Family', emoji: '🎵', category: 'Streaming' as Category, typicalCost: 16.99 },
-  { name: 'Netflix Premium 4K', emoji: '🍿', category: 'Streaming' as Category, typicalCost: 22.99 },
-  { name: 'ChatGPT Plus Team', emoji: '🤖', category: 'AI Tools' as Category, typicalCost: 20.00 },
-  { name: 'Adobe Creative Cloud', emoji: '🎨', category: 'Productivity' as Category, typicalCost: 89.99 },
-  { name: 'Microsoft 365 Family', emoji: '📎', category: 'Productivity' as Category, typicalCost: 9.99 },
-  { name: 'Apple One Premier', emoji: '🍏', category: 'Storage' as Category, typicalCost: 37.95 },
-  { name: 'Canva Pro', emoji: '✨', category: 'Productivity' as Category, typicalCost: 14.99 },
-  { name: 'NordVPN', emoji: '🛡️', category: 'Security' as Category, typicalCost: 12.99 },
-  { name: 'Notion Plus', emoji: '📝', category: 'Productivity' as Category, typicalCost: 10.00 },
+  { name: 'YouTube Premium', serviceName: 'YouTube', emoji: '🎬', category: 'Streaming' as Category, typicalCost: 4800 },
+  { name: 'Spotify Family', serviceName: 'Spotify', emoji: '🎵', category: 'Streaming' as Category, typicalCost: 5000 },
+  { name: 'Netflix Premium 4K', serviceName: 'Netflix', emoji: '🍿', category: 'Streaming' as Category, typicalCost: 8500 },
+  { name: 'ChatGPT Plus Team', serviceName: 'ChatGPT', emoji: '🤖', category: 'AI Tools' as Category, typicalCost: 30000 },
+  { name: 'Adobe Creative Cloud', serviceName: 'Adobe', emoji: '🎨', category: 'Productivity' as Category, typicalCost: 45000 },
+  { name: 'Microsoft 365 Family', serviceName: 'Microsoft 365', emoji: '📎', category: 'Productivity' as Category, typicalCost: 12000 },
+  { name: 'Apple One Premier', serviceName: 'Apple One', emoji: '🍏', category: 'Storage' as Category, typicalCost: 15000 },
+  { name: 'Canva Pro', serviceName: 'Canva', emoji: '✨', category: 'Productivity' as Category, typicalCost: 18000 },
+  { name: 'Xbox Game Pass Ultimate', serviceName: 'Xbox', emoji: '🎮', category: 'Gaming' as Category, typicalCost: 12000 },
+  { name: 'Notion Plus', serviceName: 'Notion', emoji: '📝', category: 'Productivity' as Category, typicalCost: 15000 },
 ];
 
 export default function CreateListingPage() {
@@ -54,6 +57,7 @@ export default function CreateListingPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string>('');
   const [createdListingId, setCreatedListingId] = useState<string>('');
+  const [catalogServices, setCatalogServices] = useState<ServiceCatalogItem[]>([]);
 
   // Form Fields
   const [selectedPlan, setSelectedPlan] = useState<string>('Spotify Family');
@@ -63,16 +67,24 @@ export default function CreateListingPage() {
 
   // Step 2 Fields
   const [currency, setCurrency] = useState<Currency>('NGN');
-  const [totalCost, setTotalCost] = useState<number>(16.99);
+  const [totalCost, setTotalCost] = useState<number>(5000);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [slotsTotal, setSlotsTotal] = useState<number>(4);
 
-  // Step 3 Fields
-  const [contactMethod, setContactMethod] = useState<'WhatsApp' | 'Email'>('WhatsApp');
-  const [whatsappNumber, setWhatsappNumber] = useState<string>('');
-  const [contactEmail, setContactEmail] = useState<string>('');
+  // Step 3 Fields (PRD: Visibility, Split Rules, Host Attestation)
+  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
+  const [rules, setRules] = useState<string>('');
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetchServicesCatalog().then((items) => {
+      if (items.length > 0) {
+        setCatalogServices(items);
+      }
+    });
+  }, []);
 
   // Sync pricing when card plans are selected
   useEffect(() => {
@@ -84,41 +96,69 @@ export default function CreateListingPage() {
       }
     } else {
       setCategory('Other');
-      setTotalCost(10.0);
+      setTotalCost(6000);
     }
   }, [selectedPlan]);
 
-  const planName = selectedPlan === 'Other' ? customPlanName : selectedPlan;
-  const costPerPerson = totalCost / slotsTotal;
-  const savingsPercent = Math.round((1 - costPerPerson / totalCost) * 100);
+  const planName = selectedPlan === 'Other' ? customPlanName.trim() : selectedPlan;
+  const matchedCatalogService = catalogServices.find((item) => {
+    const target = (
+      GRID_PLANS.find((p) => p.name === selectedPlan)?.serviceName ||
+      planName
+    ).toLowerCase();
+    const sName = item.name.toLowerCase();
+    return target === sName || target.startsWith(`${sName} `) || sName.startsWith(target);
+  });
+
+  const costPerPerson = slotsTotal > 0 ? totalCost / slotsTotal : 0;
+  const platformFeeEstimate = costPerPerson * 0.1;
+  const memberCheckoutTotal = costPerPerson + platformFeeEstimate;
+  const savingsPercent = totalCost > 0 ? Math.round((1 - costPerPerson / totalCost) * 100) : 0;
 
   const handleNext = () => {
+    setSubmitError('');
     setDirection('forward');
     setStep((prev) => (prev + 1) as 1 | 2 | 3);
   };
 
   const handleBack = () => {
+    setSubmitError('');
     setDirection('backward');
     setStep((prev) => (prev - 1) as 1 | 2 | 3);
   };
 
   const handlePostSplit = async () => {
-    if (!user) return;
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    if (!termsAccepted) {
+      setSubmitError('Please confirm the host attestation checkbox before publishing.');
+      return;
+    }
+    if (!totalCost || totalCost <= 0) {
+      setSubmitError('Please enter a valid total plan cost greater than 0.');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError('');
 
     try {
-      const finalContact = contactMethod === 'WhatsApp' ? whatsappNumber : contactEmail;
-
       const created = await handleCreateListing({
         planName: planName || 'Custom subscription',
         category,
         totalCost,
         slotsTotal,
         currency,
-        description: description || `Split co-buying group for ${planName}. Save together.`,
-        contactMethod,
-        contactValue: finalContact || user.email,
+        billingCycle,
+        visibility,
+        rules: rules.trim() || undefined,
+        serviceId: matchedCatalogService?.id,
+        description:
+          description.trim() || `Shared subscription group for ${planName || 'this plan'}.`,
+        contactMethod: 'Email',
+        contactValue: user.email,
         logoEmoji: GRID_PLANS.find((p) => p.name === selectedPlan)?.emoji || '🔋',
         hostAttested: termsAccepted,
       });
@@ -355,8 +395,8 @@ export default function CreateListingPage() {
 
           <div className="flex justify-between text-[13px] font-medium text-dust">
             <span className={step === 1 ? 'text-ink' : ''}>Plan</span>
-            <span className={step === 2 ? 'text-ink' : ''}>Pricing</span>
-            <span className={step === 3 ? 'text-ink' : ''}>Contact</span>
+            <span className={step === 2 ? 'text-ink' : ''}>Pricing &amp; Seats</span>
+            <span className={step === 3 ? 'text-ink' : ''}>Rules &amp; Publish</span>
           </div>
         </div>
 
@@ -495,10 +535,10 @@ export default function CreateListingPage() {
                     </CustomText>
                   </div>
 
-                  {/* Total Cost Row */}
+                  {/* Total Cost & Billing Cycle Row */}
                   <div className="space-y-2">
                     <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">
-                      Full plan cost per month
+                      Full plan cost ({billingCycle === 'monthly' ? 'per month' : 'per year'})
                     </label>
                     <div className="flex gap-3">
                       <CustomField
@@ -515,6 +555,37 @@ export default function CreateListingPage() {
                         onChange={(val) => setTotalCost(parseFloat(String(val)) || 0)}
                         className="flex-1"
                       />
+                    </div>
+                  </div>
+
+                  {/* Billing Cycle Selector */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">
+                      Billing cycle
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setBillingCycle('monthly')}
+                        className={`h-[44px] rounded-xl text-[13px] font-semibold border transition-all cursor-pointer ${
+                          billingCycle === 'monthly'
+                            ? 'border-ink bg-surface text-ink shadow-xs'
+                            : 'border-border bg-white text-slate hover:bg-surface'
+                        }`}
+                      >
+                        Monthly
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillingCycle('yearly')}
+                        className={`h-[44px] rounded-xl text-[13px] font-semibold border transition-all cursor-pointer ${
+                          billingCycle === 'yearly'
+                            ? 'border-ink bg-surface text-ink shadow-xs'
+                            : 'border-border bg-white text-slate hover:bg-surface'
+                        }`}
+                      >
+                        Yearly
+                      </button>
                     </div>
                   </div>
 
@@ -536,20 +607,31 @@ export default function CreateListingPage() {
                       </span>
                       <button
                         type="button"
-                        onClick={() => setSlotsTotal((prev) => Math.min(6, prev + 1))}
+                        onClick={() => setSlotsTotal((prev) => Math.min(20, prev + 1))}
                         className="w-10 h-10 rounded-full border border-border bg-white text-ink font-semibold flex items-center justify-center hover:bg-surface transition-colors duration-150 cursor-pointer"
                       >
                         +
                       </button>
                     </div>
+                    <span className="text-[11px] text-dust block">
+                      {slotsTotal - 1} open {slotsTotal - 1 === 1 ? 'seat' : 'seats'} will be available for members to join.
+                    </span>
                   </div>
 
                   {/* Auto Calculated Display Card */}
                   <div className="bg-surface rounded-2xl p-5 border border-border space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-[13px] text-slate font-medium">Cost per person</span>
+                      <span className="text-[13px] text-slate font-medium">Seat price (host payout per seat)</span>
                       <span className="text-[28px] font-bold text-gt-green font-numeric-tabular leading-none">
-                        ₦{costPerPerson.toFixed(2)}<span className="text-xs font-normal">/mo</span>
+                        ₦{costPerPerson.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span className="text-xs font-normal">/{billingCycle === 'monthly' ? 'mo' : 'yr'}</span>
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[12px] text-slate border-t border-border/60 pt-2.5">
+                      <span>Member checkout total (includes 10% platform fee)</span>
+                      <span className="font-mono font-semibold text-ink">
+                        ₦{memberCheckoutTotal.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
 
@@ -561,7 +643,7 @@ export default function CreateListingPage() {
                     </div>
 
                     {savingsPercent > 50 && (
-                      <div className="text-[13px] text-[#16a34a] font-medium animate-pulse pt-1 flex items-center gap-1.5">
+                      <div className="text-[13px] text-[#16a34a] font-medium pt-1 flex items-center gap-1.5">
                         <span>🎉</span>
                         <span>Great deal — most people save 60-80% on GrossThrift</span>
                       </div>
@@ -582,76 +664,93 @@ export default function CreateListingPage() {
                 >
                   <div>
                     <CustomText type="headline-sm" as="h2" className="font-sans font-semibold text-ink">
-                      How should people reach you?
+                      Visibility, rules &amp; sharing compliance
+                    </CustomText>
+                    <CustomText type="body-sm" className="text-slate mt-1">
+                      Set who can discover your split and confirm official invitation sharing.
                     </CustomText>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div
-                      onClick={() => setContactMethod('WhatsApp')}
-                      className={`border rounded-xl p-5 text-center cursor-pointer transition-all duration-150 flex flex-col items-center gap-3 ${
-                        contactMethod === 'WhatsApp' ? 'border-ink bg-surface shadow-gt-card' : 'border-border bg-white hover:bg-surface'
-                      }`}
-                    >
-                      <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center border border-emerald-100">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.458 5.704 1.459h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413" fill="#25D366" />
-                        </svg>
+                  {/* Visibility Selector (PRD INV-1 / F-08) */}
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">
+                      Listing Visibility
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div
+                        onClick={() => setVisibility('public')}
+                        className={`border rounded-xl p-4 cursor-pointer transition-all duration-150 flex items-start gap-3 ${
+                          visibility === 'public'
+                            ? 'border-ink bg-surface shadow-gt-card'
+                            : 'border-border bg-white hover:bg-surface'
+                        }`}
+                      >
+                        <div className="w-9 h-9 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center shrink-0 border border-emerald-100 mt-0.5">
+                          <Globe size={18} />
+                        </div>
+                        <div className="text-left">
+                          <span className="text-[13px] font-semibold text-ink block">Public Split</span>
+                          <span className="text-[11px] text-slate leading-snug block mt-0.5">
+                            Listed in Browse so any verified member can reserve a seat.
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-[13px] font-semibold">WhatsApp</span>
-                    </div>
 
-                    <div
-                      onClick={() => setContactMethod('Email')}
-                      className={`border rounded-xl p-5 text-center cursor-pointer transition-all duration-150 flex flex-col items-center gap-3 ${
-                        contactMethod === 'Email' ? 'border-ink bg-surface shadow-gt-card' : 'border-border bg-white hover:bg-surface'
-                      }`}
-                    >
-                      <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center border border-red-100">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="#EA4335" />
-                        </svg>
+                      <div
+                        onClick={() => setVisibility('private')}
+                        className={`border rounded-xl p-4 cursor-pointer transition-all duration-150 flex items-start gap-3 ${
+                          visibility === 'private'
+                            ? 'border-ink bg-surface shadow-gt-card'
+                            : 'border-border bg-white hover:bg-surface'
+                        }`}
+                      >
+                        <div className="w-9 h-9 bg-amber-50 text-amber-700 rounded-xl flex items-center justify-center shrink-0 border border-amber-100 mt-0.5">
+                          <Lock size={18} />
+                        </div>
+                        <div className="text-left">
+                          <span className="text-[13px] font-semibold text-ink block">Private (Invite Only)</span>
+                          <span className="text-[11px] text-slate leading-snug block mt-0.5">
+                            Hidden from Browse. Only people with your invite link can join.
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-[13px] font-semibold">Email</span>
                     </div>
                   </div>
 
-                  {/* Contact Input fields using CustomField */}
-                  {contactMethod === 'WhatsApp' ? (
-                    <CustomField
-                      label="WhatsApp number"
-                      type="tel"
-                      placeholder="+1 (555) 000-0000"
-                      value={whatsappNumber}
-                      onChange={(val) => setWhatsappNumber(String(val))}
-                    />
-                  ) : (
-                    <CustomField
-                      label="Email Address"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={contactEmail}
-                      onChange={(val) => setContactEmail(String(val))}
-                    />
-                  )}
+                  {/* Split Rules (PRD LST-1 / F-08) */}
+                  <CustomField
+                    as="textarea"
+                    label="Split Rules for Members (optional)"
+                    placeholder="e.g. Use your own assigned profile only. Do not alter billing settings or share your invitation link."
+                    value={rules}
+                    onChange={(val) => setRules(String(val).slice(0, 300))}
+                  />
 
-                  {/* Blue Info Notice Box */}
+                  {/* Service Sharing Policy Note (PRD LST-2 / F-07) */}
                   <div className="flex gap-3 bg-[#f0f9ff] border border-[#bae6fd] rounded-xl p-4 text-[#0369a1]">
                     <span className="text-[16px] shrink-0 mt-0.5">ℹ️</span>
-                    <p className="text-[13px] leading-relaxed">
-                      Your contact details are only revealed to people whose join request you accept.
-                    </p>
+                    <div className="space-y-1 text-[12.5px] leading-relaxed">
+                      <p className="font-semibold">Official Invitation Flow Only — No Shared Passwords</p>
+                      <p>
+                        {matchedCatalogService?.sharing_policy_note ||
+                          'Only list a plan whose current terms expressly allow sharing with the intended members. Invite members through the provider’s official invitation flow; never post or collect account passwords.'}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* CustomCheckboxGroup */}
-                  <div className="pt-2">
+                  {/* Host Attestation Checkbox (PRD LST-2 / F-09) */}
+                  <div className="pt-1">
                     <CustomCheckboxGroup
                       value={termsAccepted ? ['accepted'] : []}
-                      onChange={(vals) => setTermsAccepted(vals.includes('accepted'))}
+                      onChange={(vals) => {
+                        setTermsAccepted(vals.includes('accepted'));
+                        if (vals.includes('accepted')) setSubmitError('');
+                      }}
                       options={[
                         {
                           value: 'accepted',
-                          label: "I confirm this split complies with each platform's terms of service",
+                          label:
+                            'I confirm this plan is already active, paid for, and officially permits sharing with the intended members.',
                         },
                       ]}
                     />
@@ -683,7 +782,7 @@ export default function CreateListingPage() {
                 <AppButton
                   variant="primary"
                   onPress={handleNext}
-                  disabled={selectedPlan === 'Other' && !customPlanName}
+                  disabled={selectedPlan === 'Other' && !customPlanName.trim()}
                 >
                   Continue →
                 </AppButton>
@@ -692,11 +791,7 @@ export default function CreateListingPage() {
                   variant="primary"
                   onPress={handlePostSplit}
                   loading={isSubmitting}
-                  disabled={
-                    isSubmitting ||
-                    !termsAccepted ||
-                    (contactMethod === 'WhatsApp' ? !whatsappNumber : !contactEmail)
-                  }
+                  disabled={isSubmitting || !termsAccepted}
                 >
                   Post my split
                 </AppButton>
