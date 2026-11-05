@@ -1,39 +1,87 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import React, { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useMemo, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { Formik, Form } from 'formik';
+import * as Yup from 'yup';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ShieldCheck,
-  Key,
-  Copy,
-  Eye,
-  EyeOff,
-  Trash2,
+  AlertCircle,
   Check,
-  X,
+  CheckCircle2,
+  Copy,
+  Key,
+  Link2,
+  Lock,
+  Send,
+  ShieldAlert,
+  ShieldCheck,
+  Star,
+  Trash2,
   User,
+  Wallet,
+  X,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { AppButton, CustomText } from '@/components/ui';
+import {
+  AppButton,
+  CustomField,
+  CustomText,
+  FormikField,
+} from '@/components/ui';
+import {
+  useConfirmAccessMutation,
+  useCreateInviteMutation,
+  useDashboardQuery,
+  useLeaveSplitMutation,
+  useMarkInvitedMutation,
+  useOpenDisputeMutation,
+  useRequestPayoutMutation,
+  useRevokeInviteMutation,
+  useSaveBankDetailsMutation,
+  useSubmitRatingMutation,
+} from '@/hooks/useAuth';
 import Navbar from '@/components/Navbar';
 import NotificationBar from '@/components/NotificationBar';
 import ListingDetailModal, { getPoolCredentials } from '@/components/ListingDetailModal';
 import AuthModal from '@/components/AuthModal';
 import PlanIcon from '@/components/PlanIcon';
 
-type TabType = 'joined' | 'hosted' | 'requests';
+type TabType = 'joined' | 'hosted' | 'requests' | 'wallet';
 
-export default function MyDashboard() {
+const bankDetailsSchema = Yup.object({
+  bankName: Yup.string().min(2, 'Enter your bank name').required('Bank name is required'),
+  accountNumber: Yup.string()
+    .matches(/^\d{10}$/, 'Enter a valid 10-digit NUBAN account number')
+    .required('10-digit account number is required'),
+  accountName: Yup.string().min(2, 'Enter the account holder name').required('Account name is required'),
+});
+
+const payoutSchema = Yup.object({
+  amount: Yup.number()
+    .min(2000, 'Minimum withdrawal is ₦2,000')
+    .required('Enter an amount to withdraw'),
+});
+
+const disputeSchema = Yup.object({
+  reason: Yup.string().required('Select a reason'),
+  description: Yup.string()
+    .min(10, 'Provide at least 10 characters explaining the issue')
+    .required('Description is required'),
+});
+
+function DashboardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const paymentQueryStatus = searchParams?.get('payment');
+
   const {
     user,
     setUser,
     listings,
     joinedListingIds,
-    joinRequests,
-    handleUpdateJoinStatus,
     handleDeleteJoinRequest,
     selectedListing,
     setSelectedListing,
@@ -42,13 +90,35 @@ export default function MyDashboard() {
     isAuthModalOpen,
     setIsAuthModalOpen,
     handleConfirmJoin,
+    refreshListings,
   } = useApp();
 
+  const dashboardQuery = useDashboardQuery(Boolean(user));
+  const markInvitedMutation = useMarkInvitedMutation();
+  const confirmAccessMutation = useConfirmAccessMutation();
+  const leaveSplitMutation = useLeaveSplitMutation();
+  const createInviteMutation = useCreateInviteMutation();
+  const revokeInviteMutation = useRevokeInviteMutation();
+  const saveBankMutation = useSaveBankDetailsMutation();
+  const requestPayoutMutation = useRequestPayoutMutation();
+  const openDisputeMutation = useOpenDisputeMutation();
+  const submitRatingMutation = useSubmitRatingMutation();
+
   const [activeTab, setActiveTab] = useState<TabType>('joined');
-  const [, setCopiedField] = useState<string | null>(null);
-  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [actionMessage, setActionMessage] = useState<string>('');
+  const [actionError, setActionError] = useState<string>('');
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [expandedCredentials, setExpandedCredentials] = useState<Record<string, boolean>>({});
   const [expandedSlots, setExpandedSlots] = useState<Record<string, boolean>>({});
+  const [generatedInviteUrls, setGeneratedInviteUrls] = useState<Record<string, string>>({});
+
+  // Dispute Modal State
+  const [disputeTarget, setDisputeTarget] = useState<{
+    membershipId: string;
+    planName: string;
+  } | null>(null);
+
+  const dashboardData = dashboardQuery.data;
 
   // 1. Hosted splits (created by this user)
   const hostedListings = useMemo(() => {
@@ -63,16 +133,38 @@ export default function MyDashboard() {
     );
   }, [listings, joinedListingIds, user]);
 
-  // 3. Pending & Approved requests related to splits hosted by this user
-  const relevantRequests = useMemo(() => {
-    const hostedIds = hostedListings.map((l) => l.id);
-    return joinRequests.filter((r) => hostedIds.includes(r.listingId));
-  }, [joinRequests, hostedListings]);
+  // Map memberships by listingId for the current user
+  const myMembershipByListingId = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof dashboardData>['memberships'][number]>();
+    if (!user || !dashboardData?.memberships) return map;
+    for (const m of dashboardData.memberships) {
+      if (m.memberId === user.id) {
+        map.set(m.listingId, m);
+      }
+    }
+    return map;
+  }, [dashboardData, user]);
 
-  // Pending requests for badge count
-  const pendingRequestsCount = useMemo(() => {
-    return relevantRequests.filter((r) => r.status === 'pending').length;
-  }, [relevantRequests]);
+  // Memberships on listings hosted by this user
+  const hostSeatMemberships = useMemo(() => {
+    if (!user || !dashboardData?.memberships) return [];
+    return dashboardData.memberships.filter(
+      (m) => m.isHost && m.memberId !== user.id && m.status !== 'left'
+    );
+  }, [dashboardData, user]);
+
+  const pendingHostActionCount = useMemo(() => {
+    return hostSeatMemberships.filter((m) => m.status === 'paid_and_held').length;
+  }, [hostSeatMemberships]);
+
+  // Rated membership IDs
+  const ratedStarsByMembershipId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of dashboardData?.ratings ?? []) {
+      map.set(r.membership_id, r.stars);
+    }
+    return map;
+  }, [dashboardData]);
 
   // Calculations for Metrics Banner
   const totalSpend = useMemo(() => {
@@ -97,16 +189,89 @@ export default function MyDashboard() {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const togglePasswordReveal = (listingId: string) => {
-    setRevealedPasswords((prev) => ({ ...prev, [listingId]: !prev[listingId] }));
-  };
-
   const toggleCredentialsExpand = (listingId: string) => {
     setExpandedCredentials((prev) => ({ ...prev, [listingId]: !prev[listingId] }));
   };
 
   const toggleSlotsExpand = (listingId: string) => {
     setExpandedSlots((prev) => ({ ...prev, [listingId]: !prev[listingId] }));
+  };
+
+  const handleMarkInvited = async (membershipId: string) => {
+    setActionError('');
+    setActionMessage('');
+    try {
+      const res = await markInvitedMutation.mutateAsync(membershipId);
+      setActionMessage(res.message);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to mark invitation as sent.');
+    }
+  };
+
+  const handleConfirmAccess = async (membershipId: string) => {
+    setActionError('');
+    setActionMessage('');
+    try {
+      const res = await confirmAccessMutation.mutateAsync(membershipId);
+      setActionMessage(res.message);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to confirm access.');
+    }
+  };
+
+  const handleLeaveSplit = async (membershipOrListingId: string, planName: string) => {
+    if (!confirm(`Are you sure you want to leave ${planName}?`)) return;
+    setActionError('');
+    setActionMessage('');
+    try {
+      const res = await leaveSplitMutation.mutateAsync(membershipOrListingId);
+      setActionMessage(res.message);
+      await refreshListings();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to leave split.');
+    }
+  };
+
+  const handleGenerateInviteLink = async (listingId: string, openSeats: number) => {
+    setActionError('');
+    setActionMessage('');
+    try {
+      const res = await createInviteMutation.mutateAsync({
+        listingId,
+        expires_in_hours: 72,
+        max_uses: Math.max(1, openSeats),
+      });
+      setGeneratedInviteUrls((prev) => ({
+        ...prev,
+        [listingId]: res.data.invite_url,
+      }));
+      navigator.clipboard.writeText(res.data.invite_url);
+      setActionMessage('Private invite link created and copied to your clipboard!');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not create private invite link.');
+    }
+  };
+
+  const handleRevokeInvite = async (listingId: string, inviteId: string) => {
+    setActionError('');
+    setActionMessage('');
+    try {
+      await revokeInviteMutation.mutateAsync({ listingId, inviteId });
+      setActionMessage('Invite link revoked.');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not revoke invite link.');
+    }
+  };
+
+  const handleRateMembership = async (membershipId: string, stars: number) => {
+    setActionError('');
+    setActionMessage('');
+    try {
+      const res = await submitRatingMutation.mutateAsync({ membershipId, stars });
+      setActionMessage(res.message);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not submit rating.');
+    }
   };
 
   // Auth Guard if not logged in
@@ -125,7 +290,7 @@ export default function MyDashboard() {
                 Sign in required
               </CustomText>
               <CustomText type="body-md" className="text-slate leading-relaxed">
-                Please sign in to view your dashboard, active splits, and pool credentials.
+                Please sign in to view your dashboard, active splits, official invitations, and escrow wallet.
               </CustomText>
             </div>
             <AppButton
@@ -150,12 +315,64 @@ export default function MyDashboard() {
     );
   }
 
+  const wallet = dashboardData?.wallet;
+
   return (
     <div className="bg-off-white min-h-screen pt-[80px]" id="dashboard-layout">
       <Navbar />
       <NotificationBar />
 
-      <div className="max-w-[1120px] mx-auto px-6 py-12 space-y-10 text-left">
+      <div className="max-w-[1120px] mx-auto px-6 py-12 space-y-8 text-left">
+        {/* Paystack Callback Banner */}
+        {paymentQueryStatus && (
+          <div
+            className={`p-4 rounded-2xl border flex items-center justify-between gap-3 text-xs font-semibold ${
+              paymentQueryStatus === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : paymentQueryStatus === 'failed' || paymentQueryStatus === 'invalid'
+                  ? 'bg-rose-50 border-rose-200 text-rose-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 size={17} className="shrink-0" />
+              <span>
+                {paymentQueryStatus === 'success'
+                  ? 'Payment confirmed and held in escrow! Your host has 24 hours to send your official provider invitation. Once you receive it, click "I Have Access" below.'
+                  : paymentQueryStatus === 'failed'
+                    ? 'Your Paystack payment did not complete and the reserved seat was released.'
+                    : paymentQueryStatus === 'refund'
+                      ? 'Your payment is queued for an automatic refund.'
+                      : 'Your seat reservation is awaiting payment confirmation.'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {actionMessage && (
+          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 size={15} />
+              <span>{actionMessage}</span>
+            </span>
+            <button onClick={() => setActionMessage('')} className="text-emerald-700 font-bold">
+              ✕
+            </button>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <AlertCircle size={15} />
+              <span>{actionError}</span>
+            </span>
+            <button onClick={() => setActionError('')} className="text-rose-700 font-bold">
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* --- METRICS BANNER --- */}
         <section
           className="bg-white border border-border rounded-[24px] p-6 sm:p-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
@@ -170,12 +387,18 @@ export default function MyDashboard() {
               referrerPolicy="no-referrer"
             />
             <div className="space-y-1">
-              <h1 className="font-sans font-semibold text-[20px] text-ink leading-tight flex items-center gap-2">
+              <h1 className="font-sans font-semibold text-[20px] text-ink leading-tight flex flex-wrap items-center gap-2">
                 <span>{user.name}</span>
                 <span className="bg-[#f0fdf4] text-gt-green border border-[#bbf7d0] text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
                   <ShieldCheck size={11} className="text-emerald-600 shrink-0" />
-                  <span>Verified Host</span>
+                  <span>Verified Account</span>
                 </span>
+                <Link
+                  href="/admin"
+                  className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full border border-border bg-surface text-slate hover:text-ink"
+                >
+                  Admin Console
+                </Link>
               </h1>
               <p className="text-[14px] text-slate font-normal leading-none mb-1.5">{user.email}</p>
 
@@ -188,14 +411,7 @@ export default function MyDashboard() {
                   {user.isVetted && (
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md uppercase tracking-wider">
                       <Check size={10} className="text-emerald-600 stroke-[3]" />
-                      <span>
-                        Vetted via{' '}
-                        {user.verificationMethod === 'linkedin'
-                          ? 'LinkedIn'
-                          : user.verificationMethod === 'email'
-                            ? 'Work Domain'
-                            : 'Self-Pledge'}
-                      </span>
+                      <span>Vetted Member</span>
                     </span>
                   )}
                 </div>
@@ -204,38 +420,35 @@ export default function MyDashboard() {
           </div>
 
           {/* Stats columns right */}
-          <div className="flex items-center gap-8 w-full md:w-auto border-t md:border-t-0 border-border pt-6 md:pt-0">
-            {/* Stat 1 */}
+          <div className="flex flex-wrap items-center gap-6 sm:gap-8 w-full md:w-auto border-t md:border-t-0 border-border pt-6 md:pt-0">
             <div className="space-y-1 flex-1 md:flex-none">
-              <span className="block font-sans font-semibold text-[24px] text-ink font-numeric-tabular leading-none">
+              <span className="block font-sans font-semibold text-[22px] text-ink font-numeric-tabular leading-none">
                 ₦{totalSpend.toFixed(2)}
               </span>
-              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">
-                ₦ Spend / mo
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-dust block">
+                Spend / mo
               </span>
             </div>
 
             <div className="h-10 w-[1px] bg-border hidden sm:block" />
 
-            {/* Stat 2 */}
             <div className="space-y-1 flex-1 md:flex-none">
-              <span className="block font-sans font-semibold text-[24px] text-gt-green font-numeric-tabular leading-none">
+              <span className="block font-sans font-semibold text-[22px] text-gt-green font-numeric-tabular leading-none">
                 ₦{totalSaved.toFixed(2)}
               </span>
-              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">
-                ₦ Saved / mo
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-dust block">
+                Saved / mo
               </span>
             </div>
 
             <div className="h-10 w-[1px] bg-border hidden sm:block" />
 
-            {/* Stat 3 */}
             <div className="space-y-1 flex-1 md:flex-none">
-              <span className="block font-sans font-semibold text-[24px] text-ink leading-none">
-                {activeSplitsCount}
+              <span className="block font-sans font-semibold text-[22px] text-ink font-numeric-tabular leading-none">
+                ₦{Number(wallet?.availableBalance ?? 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
               </span>
-              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">
-                Active Splits
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-dust block">
+                Host Wallet ({activeSplitsCount} splits)
               </span>
             </div>
           </div>
@@ -243,12 +456,10 @@ export default function MyDashboard() {
 
         {/* --- TABBED VIEW SYSTEM --- */}
         <section className="space-y-6" id="dashboard-tabs-section">
-          {/* Sub Navigation Bar */}
-          <div className="flex items-center border-b border-border" id="dashboard-tabs">
-            {/* Tab 1 */}
+          <div className="flex items-center overflow-x-auto border-b border-border" id="dashboard-tabs">
             <button
               onClick={() => setActiveTab('joined')}
-              className={`py-3.5 px-6 text-[14px] font-medium transition-all duration-150 cursor-pointer relative ${
+              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${
                 activeTab === 'joined' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
               }`}
             >
@@ -261,10 +472,9 @@ export default function MyDashboard() {
               )}
             </button>
 
-            {/* Tab 2 */}
             <button
               onClick={() => setActiveTab('hosted')}
-              className={`py-3.5 px-6 text-[14px] font-medium transition-all duration-150 cursor-pointer relative ${
+              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${
                 activeTab === 'hosted' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
               }`}
             >
@@ -277,24 +487,36 @@ export default function MyDashboard() {
               )}
             </button>
 
-            {/* Tab 3 */}
             <button
               onClick={() => setActiveTab('requests')}
-              className={`py-3.5 px-6 text-[14px] font-medium transition-all duration-150 cursor-pointer relative ${
+              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${
                 activeTab === 'requests' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
               }`}
             >
-              <span>Join requests</span>
-              {pendingRequestsCount > 0 ? (
+              <span>Member Invites &amp; Handshakes</span>
+              {pendingHostActionCount > 0 ? (
                 <span className="ml-1.5 px-2 py-0.5 bg-gt-red text-white text-[11px] rounded-full font-bold animate-pulse">
-                  {pendingRequestsCount}
+                  {pendingHostActionCount}
                 </span>
               ) : (
                 <span className="ml-1.5 px-2 py-0.5 bg-surface text-slate text-[11px] rounded-full font-bold">
-                  {relevantRequests.length}
+                  {hostSeatMemberships.length}
                 </span>
               )}
               {activeTab === 'requests' && (
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-ink" />
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('wallet')}
+              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 flex items-center gap-1.5 ${
+                activeTab === 'wallet' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
+              }`}
+            >
+              <Wallet size={14} />
+              <span>Wallet &amp; Payouts</span>
+              {activeTab === 'wallet' && (
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-ink" />
               )}
             </button>
@@ -317,15 +539,18 @@ export default function MyDashboard() {
                       const costPerPerson = listing.totalCost / listing.slotsTotal;
                       const credentials = getPoolCredentials(listing);
                       const isCredsExpanded = !!expandedCredentials[listing.id];
-                      const isRevealed = !!revealedPasswords[listing.id];
+                      const membership = myMembershipByListingId.get(listing.id);
+                      const mStatus = membership?.status || 'paid_and_held';
+                      const existingRating = membership
+                        ? ratedStarsByMembershipId.get(membership.id)
+                        : undefined;
 
                       return (
                         <div
                           key={listing.id}
-                          className="bg-white border border-border rounded-[20px] p-6 shadow-sm flex flex-col justify-between space-y-6"
+                          className="bg-white border border-border rounded-[20px] p-6 shadow-sm flex flex-col justify-between space-y-5"
                         >
                           <div className="space-y-4">
-                            {/* Card Header info */}
                             <div className="flex justify-between items-start">
                               <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-surface border border-border rounded-[10px] flex items-center justify-center">
@@ -335,7 +560,9 @@ export default function MyDashboard() {
                                   <h3 className="font-sans font-semibold text-[16px] text-ink leading-tight">
                                     {listing.planName}
                                   </h3>
-                                  <span className="text-[12px] text-slate font-medium">{listing.category}</span>
+                                  <span className="text-[12px] text-slate font-medium">
+                                    {listing.category}
+                                  </span>
                                 </div>
                               </div>
                               <div className="text-right">
@@ -343,30 +570,126 @@ export default function MyDashboard() {
                                   ₦{costPerPerson.toFixed(2)}
                                 </span>
                                 <span className="text-[11px] text-dust uppercase font-bold tracking-wider">
-                                  per person / mo
+                                  per seat / {listing.billingCycle || 'mo'}
                                 </span>
                               </div>
                             </div>
 
-                            {/* HOST DETAILS ROW */}
-                            <div className="flex items-center gap-2 pt-1.5">
-                              <img
-                                src={
-                                  listing.hostAvatar ||
-                                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'
-                                }
-                                alt={listing.hostName}
-                                className="w-6 h-6 rounded-full object-cover"
-                                referrerPolicy="no-referrer"
-                              />
-                              <div className="flex items-center gap-1 text-[13px] text-slate">
-                                <span className="font-medium text-ink">{listing.hostName}</span>
-                                <span className="text-dust">·</span>
-                                <span className="text-[12px]">Hosted Split</span>
+                            {/* PRD Membership Lifecycle Badge */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 bg-surface border border-border rounded-xl px-3.5 py-2.5 text-xs">
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={listing.hostAvatar}
+                                  alt={listing.hostName}
+                                  className="w-5 h-5 rounded-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <span className="font-medium text-ink">Host: {listing.hostName}</span>
                               </div>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                  mStatus === 'active'
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : mStatus === 'invited'
+                                      ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                      : mStatus === 'disputed'
+                                        ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                        : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                }`}
+                              >
+                                {mStatus === 'active'
+                                  ? '✓ Active Access'
+                                  : mStatus === 'invited'
+                                    ? 'Invite Sent — Confirm Access'
+                                    : mStatus === 'paid_and_held'
+                                      ? 'Escrow Held — Awaiting Host Invite'
+                                      : mStatus === 'pending_payment'
+                                        ? 'Seat Reserved — Payment Pending'
+                                        : mStatus}
+                              </span>
                             </div>
 
-                            {/* REVEAL CREDENTIALS DRAW PANEL */}
+                            {/* PRD Handshake Action Box (ACC-1 / ACC-2 / F-30) */}
+                            {membership && mStatus === 'pending_payment' && membership.authorizationUrl && (
+                              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 space-y-2.5">
+                                <p className="text-xs text-amber-900 font-medium">
+                                  Your seat reservation is held for 10 minutes. Complete Paystack checkout to lock in your seat.
+                                </p>
+                                <AppButton
+                                  variant="primary"
+                                  size="sm"
+                                  fullWidth
+                                  onPress={() => window.location.assign(membership.authorizationUrl!)}
+                                >
+                                  Complete Paystack Checkout →
+                                </AppButton>
+                              </div>
+                            )}
+
+                            {membership && (mStatus === 'paid_and_held' || mStatus === 'invited') && (
+                              <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+                                <p className="text-xs text-emerald-950 leading-relaxed">
+                                  {mStatus === 'invited'
+                                    ? 'Your host marked the official provider invitation as sent! Check your email/service account, accept the invite, and click "I Have Access" below to release the host payout.'
+                                    : 'Your payment is protected in escrow. Once you receive and accept the official invitation from the host, click "I Have Access" below.'}
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  <AppButton
+                                    variant="primary"
+                                    size="sm"
+                                    loading={confirmAccessMutation.isPending}
+                                    onPress={() => handleConfirmAccess(membership.id)}
+                                    startContent={<Check size={14} />}
+                                  >
+                                    I Have Access (Release Escrow)
+                                  </AppButton>
+                                  <AppButton
+                                    variant="secondary-outline"
+                                    size="sm"
+                                    onPress={() =>
+                                      setDisputeTarget({
+                                        membershipId: membership.id,
+                                        planName: listing.planName,
+                                      })
+                                    }
+                                    startContent={<ShieldAlert size={13} />}
+                                  >
+                                    Report a Problem
+                                  </AppButton>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* 1–5 Star Host Rating (PRD RAT-1 / F-45) */}
+                            {membership && mStatus === 'active' && (
+                              <div className="px-3.5 py-2.5 rounded-xl bg-surface border border-border flex items-center justify-between text-xs">
+                                <span className="font-medium text-slate">
+                                  {existingRating ? 'Your host rating:' : 'Rate this host:'}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                      key={star}
+                                      type="button"
+                                      onClick={() => handleRateMembership(membership.id, star)}
+                                      className="p-1 cursor-pointer text-amber-500 hover:scale-110 transition-transform"
+                                      title={`Rate ${star} stars`}
+                                    >
+                                      <Star
+                                        size={15}
+                                        fill={
+                                          existingRating && star <= existingRating
+                                            ? 'currentColor'
+                                            : 'none'
+                                        }
+                                      />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Official Invitation Instructions Drawer */}
                             <div className="border border-border rounded-xl bg-surface overflow-hidden">
                               <button
                                 onClick={() => toggleCredentialsExpand(listing.id)}
@@ -374,10 +697,10 @@ export default function MyDashboard() {
                               >
                                 <span className="flex items-center gap-1.5">
                                   <Key size={14} className="text-slate" />
-                                  <span>Pool Login Credentials</span>
+                                  <span>Official Invitation &amp; Access Rules</span>
                                 </span>
                                 <span className="text-[11px] font-bold text-dust uppercase tracking-wider">
-                                  {isCredsExpanded ? 'Hide' : 'Reveal'}
+                                  {isCredsExpanded ? 'Hide' : 'View'}
                                 </span>
                               </button>
 
@@ -388,90 +711,54 @@ export default function MyDashboard() {
                                     animate={{ height: 'auto', opacity: 1 }}
                                     exit={{ height: 0, opacity: 0 }}
                                     transition={{ duration: 0.2 }}
-                                    className="p-4 space-y-3.5 text-left"
+                                    className="p-4 space-y-3 text-left text-xs"
                                   >
-                                    {/* Username field */}
-                                    <div className="space-y-1">
-                                      <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-dust block">
-                                        Email / Username
+                                    <div className="p-3 bg-white border border-border rounded-lg text-slate leading-relaxed">
+                                      <span className="font-bold text-ink block mb-0.5">
+                                        No Shared Passwords Policy:
                                       </span>
-                                      <div className="flex items-center justify-between bg-white border border-border rounded-lg px-3 py-1.5 text-[13px]">
-                                        <span className="font-mono text-ink font-medium select-all truncate mr-2">
-                                          {credentials.email}
-                                        </span>
-                                        <button
-                                          onClick={() => handleCopyText(credentials.email, 'Email')}
-                                          className="text-dust hover:text-ink cursor-pointer shrink-0"
-                                        >
-                                          <Copy size={13} />
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    {/* Password field */}
-                                    <div className="space-y-1">
-                                      <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-dust block">
-                                        Password
-                                      </span>
-                                      <div className="flex items-center justify-between bg-white border border-border rounded-lg px-3 py-1.5 text-[13px]">
-                                        <span className="font-mono text-ink font-medium select-all truncate mr-2">
-                                          {isRevealed ? credentials.pass : '••••••••••••'}
-                                        </span>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                          <button
-                                            onClick={() => togglePasswordReveal(listing.id)}
-                                            className="text-dust hover:text-ink cursor-pointer"
-                                          >
-                                            {isRevealed ? <EyeOff size={13} /> : <Eye size={13} />}
-                                          </button>
-                                          <button
-                                            onClick={() => handleCopyText(credentials.pass, 'Password')}
-                                            className="text-dust hover:text-ink cursor-pointer"
-                                          >
-                                            <Copy size={13} />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* Profile seat assignment */}
-                                    {credentials.profile && (
-                                      <div className="bg-white border border-border rounded-lg px-3 py-2 text-[12px] text-slate font-medium flex justify-between items-center">
-                                        <span>Assigned Profile Seat:</span>
-                                        <span className="font-bold text-ink uppercase tracking-tight">
-                                          {credentials.profile}
-                                        </span>
-                                      </div>
-                                    )}
-
-                                    {/* Setup Instructions */}
-                                    <div className="p-3 bg-white border border-border rounded-lg text-[12px] text-slate leading-relaxed">
-                                      <span className="font-bold text-ink block mb-0.5">Instructions:</span>
                                       {credentials.instructions}
                                     </div>
+                                    {listing.rules && (
+                                      <div className="p-3 bg-white border border-border rounded-lg text-slate leading-relaxed">
+                                        <span className="font-bold text-ink block mb-0.5">
+                                          Host Split Rules:
+                                        </span>
+                                        {listing.rules}
+                                      </div>
+                                    )}
                                   </motion.div>
                                 )}
                               </AnimatePresence>
                             </div>
                           </div>
 
-                          {/* Leave split Button bottom */}
-                          <div className="pt-4 border-t border-border flex justify-end">
-                            <button
-                              onClick={() => {
-                                if (
-                                  confirm(
-                                    `Are you sure you want to leave ${listing.planName}? You will lose access to the credentials instantly.`
-                                  )
-                                ) {
-                                  const req = joinRequests.find((r) => r.listingId === listing.id);
-                                  if (req) {
-                                    handleDeleteJoinRequest(req.id);
-                                  } else {
-                                    handleDeleteJoinRequest(listing.id);
-                                  }
+                          {/* Bottom Actions */}
+                          <div className="pt-4 border-t border-border flex items-center justify-between">
+                            {membership && mStatus === 'active' ? (
+                              <button
+                                onClick={() =>
+                                  setDisputeTarget({
+                                    membershipId: membership.id,
+                                    planName: listing.planName,
+                                  })
                                 }
-                              }}
+                                className="text-[12px] font-medium text-slate hover:text-amber-700 cursor-pointer flex items-center gap-1"
+                              >
+                                <ShieldAlert size={13} />
+                                <span>Report problem</span>
+                              </button>
+                            ) : (
+                              <div />
+                            )}
+
+                            <button
+                              onClick={() =>
+                                handleLeaveSplit(
+                                  membership?.id || listing.id,
+                                  listing.planName
+                                )
+                              }
                               className="text-[13px] font-medium text-slate hover:text-gt-red cursor-pointer flex items-center gap-1.5 transition-colors"
                             >
                               <Trash2 size={13} />
@@ -482,19 +769,15 @@ export default function MyDashboard() {
                       );
                     })
                   ) : (
-                    /* Empty joined state */
                     <div className="col-span-full text-center py-16 bg-white border border-border rounded-[24px] space-y-4 max-w-md mx-auto mt-6">
                       <span className="text-[32px] block select-none">🔌</span>
                       <h3 className="font-sans font-semibold text-[17px] text-ink">No joined splits</h3>
                       <p className="text-[14px] text-slate max-w-xs mx-auto leading-relaxed">
                         You aren&apos;t a member of any subscription splits yet. Browse available splits to start co-buying.
                       </p>
-                      <button
-                        onClick={() => router.push('/browse')}
-                        className="px-5 py-2.5 bg-charcoal text-white dark:text-[#141c17] font-semibold rounded-xl text-[13px] cursor-pointer"
-                      >
+                      <AppButton variant="primary" onPress={() => router.push('/browse')}>
                         Browse splits
-                      </button>
+                      </AppButton>
                     </div>
                   )}
                 </motion.div>
@@ -513,15 +796,19 @@ export default function MyDashboard() {
                     hostedListings.map((listing) => {
                       const costPerPerson = listing.totalCost / listing.slotsTotal;
                       const isSlotsExpanded = !!expandedSlots[listing.id];
-
-                      const approvedJoiners = relevantRequests.filter(
-                        (r) => r.listingId === listing.id && r.status === 'approved'
+                      const openSeats = Math.max(0, listing.slotsTotal - listing.slotsFilled);
+                      const listingMembers = hostSeatMemberships.filter(
+                        (m) => m.listingId === listing.id
                       );
+                      const listingInvites = (dashboardData?.invites ?? []).filter(
+                        (i) => i.listing_id === listing.id && i.status === 'active'
+                      );
+                      const latestInviteUrl = generatedInviteUrls[listing.id];
 
                       return (
                         <div
                           key={listing.id}
-                          className="bg-white border border-border rounded-[20px] p-6 shadow-sm flex flex-col justify-between space-y-6"
+                          className="bg-white border border-border rounded-[20px] p-6 shadow-sm flex flex-col justify-between space-y-5"
                         >
                           <div className="space-y-4">
                             <div className="flex justify-between items-start">
@@ -530,10 +817,23 @@ export default function MyDashboard() {
                                   <PlanIcon name={listing.planName} size={24} />
                                 </div>
                                 <div className="text-left">
-                                  <h3 className="font-sans font-semibold text-[16px] text-ink leading-tight">
-                                    {listing.planName}
-                                  </h3>
-                                  <span className="text-[12px] text-slate font-medium">{listing.category}</span>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-sans font-semibold text-[16px] text-ink leading-tight">
+                                      {listing.planName}
+                                    </h3>
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                        listing.visibility === 'private'
+                                          ? 'bg-amber-100 text-amber-800'
+                                          : 'bg-emerald-50 text-emerald-700'
+                                      }`}
+                                    >
+                                      {listing.visibility === 'private' ? 'Private' : 'Public'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[12px] text-slate font-medium">
+                                    {listing.category}
+                                  </span>
                                 </div>
                               </div>
                               <div className="text-right">
@@ -541,7 +841,7 @@ export default function MyDashboard() {
                                   ₦{costPerPerson.toFixed(2)}
                                 </span>
                                 <span className="text-[11px] text-dust uppercase font-bold tracking-wider">
-                                  per person / mo
+                                  per seat / {listing.billingCycle || 'mo'}
                                 </span>
                               </div>
                             </div>
@@ -549,20 +849,84 @@ export default function MyDashboard() {
                             {/* Slot indicators */}
                             <div className="space-y-1">
                               <div className="flex justify-between text-[11px] text-dust font-bold uppercase tracking-wider">
-                                <span>Slots filled</span>
+                                <span>Seats filled</span>
                                 <span className="text-slate font-numeric-tabular">
-                                  {listing.slotsFilled} of {listing.slotsTotal}
+                                  {listing.slotsFilled} of {listing.slotsTotal} ({openSeats} open)
                                 </span>
                               </div>
-                              <div className="w-full h-1 bg-surface rounded-full overflow-hidden">
+                              <div className="w-full h-1.5 bg-surface rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-ink"
-                                  style={{ width: `${(listing.slotsFilled / listing.slotsTotal) * 100}%` }}
+                                  style={{
+                                    width: `${(listing.slotsFilled / listing.slotsTotal) * 100}%`,
+                                  }}
                                 />
                               </div>
                             </div>
 
-                            {/* MANAGE SLOTS EXPAND DRAW */}
+                            {/* Private Invite Link Generator (PRD INV-1 / F-18 / F-20) */}
+                            <div className="p-3.5 rounded-xl bg-surface border border-border space-y-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-ink flex items-center gap-1.5">
+                                  <Link2 size={14} className="text-gt-green" />
+                                  <span>Private Invite Links</span>
+                                </span>
+                                <AppButton
+                                  size="sm"
+                                  variant="secondary-outline"
+                                  loading={createInviteMutation.isPending}
+                                  disabled={openSeats < 1}
+                                  onPress={() => handleGenerateInviteLink(listing.id, openSeats)}
+                                  startContent={<Lock size={12} />}
+                                >
+                                  Generate Invite Link
+                                </AppButton>
+                              </div>
+
+                              {latestInviteUrl && (
+                                <div className="flex items-center gap-2 bg-white border border-border rounded-lg p-2 text-xs">
+                                  <span className="font-mono text-[11px] text-ink truncate flex-1">
+                                    {latestInviteUrl}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyText(latestInviteUrl, listing.id)}
+                                    className="px-2 py-1 bg-charcoal text-white dark:text-[#141c17] rounded text-[10px] font-bold cursor-pointer shrink-0 flex items-center gap-1"
+                                  >
+                                    <Copy size={11} />
+                                    <span>{copiedField === listing.id ? 'Copied' : 'Copy'}</span>
+                                  </button>
+                                </div>
+                              )}
+
+                              {listingInvites.length > 0 && (
+                                <div className="space-y-1.5 pt-1">
+                                  {listingInvites.map((inv) => (
+                                    <div
+                                      key={inv.id}
+                                      className="flex items-center justify-between text-[11px] bg-white border border-border rounded-lg px-2.5 py-1.5"
+                                    >
+                                      <span className="text-slate">
+                                        Uses: {inv.use_count}/{inv.max_uses} · Expires{' '}
+                                        {new Date(inv.expires_at).toLocaleDateString('en-NG', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                        })}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRevokeInvite(listing.id, inv.id)}
+                                        className="text-rose-600 hover:underline font-semibold cursor-pointer"
+                                      >
+                                        Revoke
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* MANAGE SEATS EXPAND DRAW */}
                             <div className="border border-border rounded-xl bg-surface overflow-hidden">
                               <button
                                 onClick={() => toggleSlotsExpand(listing.id)}
@@ -570,7 +934,7 @@ export default function MyDashboard() {
                               >
                                 <span className="flex items-center gap-1.5">
                                   <User size={14} className="text-slate" />
-                                  <span>Manage split slots</span>
+                                  <span>Manage split seats ({listingMembers.length} members)</span>
                                 </span>
                                 <span className="text-[11px] font-bold text-dust uppercase tracking-wider">
                                   {isSlotsExpanded ? 'Hide' : 'Manage'}
@@ -586,7 +950,7 @@ export default function MyDashboard() {
                                     transition={{ duration: 0.2 }}
                                     className="p-4 space-y-2 text-left"
                                   >
-                                    {/* You (Host) Seat */}
+                                    {/* Host Seat */}
                                     <div className="flex justify-between items-center bg-white border border-border rounded-lg p-2.5 text-[13px]">
                                       <div className="flex items-center gap-2">
                                         <img
@@ -595,75 +959,47 @@ export default function MyDashboard() {
                                           className="w-5 h-5 rounded-full object-cover"
                                           referrerPolicy="no-referrer"
                                         />
-                                        <span className="font-semibold text-ink">{user.name.split(' ')[0]} (Host)</span>
+                                        <span className="font-semibold text-ink">
+                                          {user.name.split(' ')[0]} (Host)
+                                        </span>
                                       </div>
                                       <span className="text-[10px] bg-surface text-slate font-bold uppercase tracking-wider px-2 py-0.5 rounded">
                                         Seat 1
                                       </span>
                                     </div>
 
-                                    {/* Approved Joiners */}
-                                    {approvedJoiners.map((joiner, index) => (
+                                    {/* Real Seat Members */}
+                                    {listingMembers.map((member, index) => (
                                       <div
-                                        key={joiner.id}
-                                        className="flex justify-between items-center bg-white border border-border rounded-lg p-2.5 text-[13px]"
+                                        key={member.id}
+                                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white border border-border rounded-lg p-2.5 text-[12px]"
                                       >
-                                        <div className="space-y-0.5">
-                                          <div className="font-semibold text-ink">{joiner.userName}</div>
-                                          <div className="text-[11px] text-slate font-mono leading-none flex items-center gap-1.5 mt-0.5">
-                                            {joiner.userContact.includes('@') ? (
-                                              <span className="flex items-center gap-1 text-red-600 font-sans font-medium text-[10px] bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-md">
-                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                                                  <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="#EA4335" />
-                                                </svg>
-                                                Email
-                                              </span>
-                                            ) : (
-                                              <span className="flex items-center gap-1 text-emerald-600 font-sans font-medium text-[10px] bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-md">
-                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.458 5.704 1.459h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413" fill="#25D366" />
-                                                </svg>
-                                                WhatsApp
-                                              </span>
-                                            )}
-                                            <span>{joiner.userContact}</span>
+                                        <div>
+                                          <div className="font-semibold text-ink">
+                                            {member.memberName}{' '}
+                                            <span className="text-[10px] font-mono text-dust">
+                                              (Seat {index + 2})
+                                            </span>
+                                          </div>
+                                          <div className="text-[11px] text-slate font-mono">
+                                            {member.memberEmail}
                                           </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
-                                          <span className="text-[10px] bg-surface text-slate font-bold uppercase tracking-wider px-2 py-0.5 rounded">
-                                            Seat {index + 2}
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-surface text-slate">
+                                            {member.status}
                                           </span>
-                                          <button
-                                            onClick={() => {
-                                              if (
-                                                confirm(
-                                                  `Remove ${joiner.userName} from this subscription split? Their slot will become vacant.`
-                                                )
-                                              ) {
-                                                handleDeleteJoinRequest(joiner.id);
-                                              }
-                                            }}
-                                            className="p-1 text-dust hover:text-gt-red cursor-pointer"
-                                            title="Remove member"
-                                          >
-                                            <Trash2 size={13} />
-                                          </button>
+                                          {member.status === 'paid_and_held' && (
+                                            <AppButton
+                                              size="sm"
+                                              variant="primary"
+                                              loading={markInvitedMutation.isPending}
+                                              onPress={() => handleMarkInvited(member.id)}
+                                            >
+                                              Mark Invited
+                                            </AppButton>
+                                          )}
                                         </div>
-                                      </div>
-                                    ))}
-
-                                    {/* Empty slots placeholders */}
-                                    {Array.from({
-                                      length: Math.max(0, listing.slotsTotal - approvedJoiners.length - 1),
-                                    }).map((_, idx) => (
-                                      <div
-                                        key={idx}
-                                        className="flex justify-between items-center border border-dashed border-border rounded-lg p-2.5 text-[13px] text-dust"
-                                      >
-                                        <span className="italic font-normal">Waiting for co-buyer ...</span>
-                                        <span className="text-[10px] uppercase font-bold tracking-wider">
-                                          Seat {approvedJoiners.length + idx + 2}
-                                        </span>
                                       </div>
                                     ))}
                                   </motion.div>
@@ -672,13 +1008,19 @@ export default function MyDashboard() {
                             </div>
                           </div>
 
-                          {/* Manage split action triggers */}
-                          <div className="pt-4 border-t border-border flex justify-end">
+                          {/* Delete / Cancel listing */}
+                          <div className="pt-4 border-t border-border flex justify-between items-center">
+                            <Link
+                              href={`/listings/${listing.id}`}
+                              className="text-xs font-semibold text-gt-green hover:underline"
+                            >
+                              View public page →
+                            </Link>
                             <button
                               onClick={() => {
                                 if (
                                   confirm(
-                                    `Delete listing for ${listing.planName}? Your split co-buying group will be closed permanently.`
+                                    `Delete or cancel listing for ${listing.planName}?`
                                   )
                                 ) {
                                   handleDeleteJoinRequest(listing.id);
@@ -694,127 +1036,441 @@ export default function MyDashboard() {
                       );
                     })
                   ) : (
-                    /* Empty hosted state */
                     <div className="col-span-full text-center py-16 bg-white border border-border rounded-[24px] space-y-4 max-w-md mx-auto mt-6">
                       <span className="text-[32px] block select-none">🎒</span>
                       <h3 className="font-sans font-semibold text-[17px] text-ink">No hosted splits</h3>
                       <p className="text-[14px] text-slate max-w-xs mx-auto leading-relaxed">
-                        You aren&apos;t hosting any splits yet. Create a split to setup your co-buying group and start saving.
+                        You aren&apos;t hosting any splits yet. Create a split to set up your co-buying group and start saving.
                       </p>
-                      <button
-                        onClick={() => router.push('/create')}
-                        className="px-5 py-2.5 bg-charcoal text-white dark:text-[#141c17] font-semibold rounded-xl text-[13px] cursor-pointer"
-                      >
+                      <AppButton variant="primary" onPress={() => router.push('/create')}>
                         List a split
-                      </button>
+                      </AppButton>
                     </div>
                   )}
                 </motion.div>
               )}
 
-              {/* TAB 3: JOIN REQUESTS */}
+              {/* TAB 3: MEMBER INVITES & HANDSHAKES (PRD ACC-1 / F-29) */}
               {activeTab === 'requests' && (
                 <motion.div
                   key="requests-tab"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className="space-y-4 max-w-2xl mx-auto"
+                  className="space-y-4 max-w-3xl mx-auto"
                 >
-                  {relevantRequests.length > 0 ? (
-                    relevantRequests.map((req) => {
-                      const targetPlan = listings.find((l) => l.id === req.listingId);
-
-                      return (
-                        <div
-                          key={req.id}
-                          className="bg-white border border-border rounded-[16px] p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-left"
-                        >
-                          <div className="space-y-2">
-                            {/* Request Details */}
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center font-bold text-ink text-[13px] border border-border">
-                                {req.userName.slice(0, 2).toUpperCase()}
-                              </div>
-                              <div className="space-y-0.5">
-                                <h4 className="font-semibold text-ink text-[14px] leading-tight">{req.userName}</h4>
-                                <p className="text-[12px] text-slate font-mono leading-none flex items-center gap-1.5 mt-0.5">
-                                  {req.userContact.includes('@') ? (
-                                    <span className="flex items-center gap-1 text-red-600 font-sans font-medium text-[10px] bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-md">
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                                        <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="#EA4335" />
-                                      </svg>
-                                      Email
-                                    </span>
-                                  ) : (
-                                    <span className="flex items-center gap-1 text-emerald-600 font-sans font-medium text-[10px] bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-md">
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.458 5.704 1.459h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413" fill="#25D366" />
-                                      </svg>
-                                      WhatsApp
-                                    </span>
-                                  )}
-                                  <span>{req.userContact}</span>
-                                </p>
-                              </div>
+                  {hostSeatMemberships.length > 0 ? (
+                    hostSeatMemberships.map((m) => (
+                      <div
+                        key={m.id}
+                        className="bg-white border border-border rounded-[18px] p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-left"
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-full bg-surface flex items-center justify-center font-bold text-ink text-xs border border-border">
+                              {m.memberName.slice(0, 2).toUpperCase()}
                             </div>
-
-                            <div className="text-[13px] text-slate">
-                              Requested to join:{' '}
-                              <strong className="text-ink font-semibold">
-                                {targetPlan ? targetPlan.planName : 'Subscription Split'}
-                              </strong>
+                            <div>
+                              <h4 className="font-semibold text-ink text-sm leading-tight">
+                                {m.memberName}
+                              </h4>
+                              <p className="text-xs text-slate font-mono">{m.memberEmail}</p>
                             </div>
                           </div>
-
-                          {/* Approval Controls */}
-                          <div className="flex gap-2 shrink-0 w-full sm:w-auto">
-                            {req.status === 'approved' ? (
-                              <div className="text-gt-green bg-gt-green-bg border border-[#bbf7d0] px-4 py-1.5 rounded-xl text-[12px] font-bold flex items-center gap-1 w-full sm:w-auto justify-center select-none">
-                                <Check size={14} strokeWidth={2.5} />
-                                <span>Approved</span>
-                              </div>
-                            ) : req.status === 'rejected' ? (
-                              <div className="text-gt-red bg-red-50 border border-red-200 px-4 py-1.5 rounded-xl text-[12px] font-bold flex items-center gap-1 w-full sm:w-auto justify-center select-none">
-                                <X size={14} strokeWidth={2.5} />
-                                <span>Rejected</span>
-                              </div>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleUpdateJoinStatus(req.id, 'approved')}
-                                  className="flex-1 sm:flex-none px-4 py-2 bg-charcoal text-white dark:text-[#141c17] text-[13px] font-semibold rounded-xl cursor-pointer"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  onClick={() => handleUpdateJoinStatus(req.id, 'rejected')}
-                                  className="flex-1 sm:flex-none px-4 py-2 border border-border hover:bg-surface text-slate hover:text-ink text-[13px] font-medium rounded-xl cursor-pointer"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
-                          </div>
+                          <p className="text-xs text-slate">
+                            Split: <strong className="text-ink">{m.planName}</strong> · Seat Payout:{' '}
+                            <strong className="text-gt-green">₦{m.pricePerSeat.toFixed(2)}</strong>
+                          </p>
                         </div>
-                      );
-                    })
+
+                        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+                          {m.status === 'paid_and_held' ? (
+                            <AppButton
+                              variant="primary"
+                              size="md"
+                              loading={markInvitedMutation.isPending}
+                              onPress={() => handleMarkInvited(m.id)}
+                              startContent={<Send size={13} />}
+                            >
+                              Mark Official Invite Sent
+                            </AppButton>
+                          ) : m.status === 'invited' ? (
+                            <span className="px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold">
+                              Invite Sent · Awaiting Member Confirmation (48h)
+                            </span>
+                          ) : m.status === 'active' ? (
+                            <span className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-1">
+                              <Check size={13} />
+                              <span>Access Confirmed · Funds Released</span>
+                            </span>
+                          ) : (
+                            <span className="px-3 py-1.5 rounded-xl bg-surface border border-border text-slate text-xs font-semibold uppercase">
+                              {m.status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
                   ) : (
-                    /* Empty Requests State */
                     <div className="text-center py-16 bg-white border border-border rounded-[24px] space-y-4 max-w-md mx-auto mt-6">
                       <span className="text-[32px] block select-none">📬</span>
-                      <h3 className="font-sans font-semibold text-[17px] text-ink">No join requests</h3>
+                      <h3 className="font-sans font-semibold text-[17px] text-ink">
+                        No member handshakes pending
+                      </h3>
                       <p className="text-[14px] text-slate max-w-xs mx-auto leading-relaxed">
-                        No co-buyers have requested to join your listed pools yet. Share your split link to fill slots faster.
+                        When a member pays for a seat on one of your listings via Paystack, they will appear here so you can send their official provider invitation.
                       </p>
                     </div>
                   )}
+                </motion.div>
+              )}
+
+              {/* TAB 4: HOST WALLET & NIGERIAN BANK PAYOUTS (PRD Section 8.6 / F-35 to F-40) */}
+              {activeTab === 'wallet' && (
+                <motion.div
+                  key="wallet-tab"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start"
+                >
+                  {/* Left Column: Balances & Withdrawal Request */}
+                  <div className="lg:col-span-6 space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="bg-white border border-border rounded-[20px] p-6 space-y-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-dust block">
+                          Available to Withdraw
+                        </span>
+                        <span className="text-3xl font-bold font-numeric-tabular text-gt-green block">
+                          ₦{Number(wallet?.availableBalance ?? 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[11px] text-slate block">
+                          Released from confirmed seats
+                        </span>
+                      </div>
+
+                      <div className="bg-white border border-border rounded-[20px] p-6 space-y-1">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-dust block">
+                          Held in Escrow
+                        </span>
+                        <span className="text-3xl font-bold font-numeric-tabular text-ink block">
+                          ₦{Number(wallet?.heldBalance ?? 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[11px] text-slate block">
+                          Unlocks when members confirm access
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bank Account Setup Form (Formik + FormikField) */}
+                    <div className="bg-white border border-border rounded-[20px] p-6 space-y-4">
+                      <div>
+                        <CustomText type="title-md" as="h3" className="font-bold text-ink">
+                          Nigerian Bank Payout Account
+                        </CustomText>
+                        <p className="text-xs text-slate mt-0.5">
+                          Save your NUBAN bank account to receive host payouts in NGN.
+                        </p>
+                      </div>
+
+                      <Formik
+                        enableReinitialize
+                        initialValues={{
+                          bankName: wallet?.bankName || '',
+                          accountNumber: wallet?.accountNumber || '',
+                          accountName: wallet?.accountName || user.name || '',
+                        }}
+                        validationSchema={bankDetailsSchema}
+                        onSubmit={async (values) => {
+                          setActionError('');
+                          setActionMessage('');
+                          try {
+                            const res = await saveBankMutation.mutateAsync(values);
+                            setActionMessage(res.message);
+                          } catch (err) {
+                            setActionError(
+                              err instanceof Error ? err.message : 'Could not save bank details.'
+                            );
+                          }
+                        }}
+                      >
+                        {() => (
+                          <Form className="space-y-4">
+                            <FormikField
+                              name="bankName"
+                              label="Bank Name"
+                              placeholder="e.g. GTBank, Access Bank, Zenith Bank, Kuda"
+                            />
+                            <FormikField
+                              name="accountNumber"
+                              label="10-Digit Account Number (NUBAN)"
+                              placeholder="0123456789"
+                            />
+                            <FormikField
+                              name="accountName"
+                              label="Account Holder Name"
+                              placeholder="Full name on bank account"
+                            />
+                            <AppButton
+                              type="submit"
+                              variant="secondary-outline"
+                              size="md"
+                              fullWidth
+                              loading={saveBankMutation.isPending}
+                            >
+                              Save Bank Account Details
+                            </AppButton>
+                          </Form>
+                        )}
+                      </Formik>
+                    </div>
+
+                    {/* Request Withdrawal Form */}
+                    <div className="bg-white border border-border rounded-[20px] p-6 space-y-4">
+                      <div>
+                        <CustomText type="title-md" as="h3" className="font-bold text-ink">
+                          Request Payout Withdrawal (Min ₦2,000)
+                        </CustomText>
+                        <p className="text-xs text-slate mt-0.5">
+                          Withdraw available escrow earnings to your saved Nigerian bank account.
+                        </p>
+                      </div>
+
+                      <Formik
+                        enableReinitialize
+                        initialValues={{
+                          amount: Math.max(2000, Number(wallet?.availableBalance ?? 2000)),
+                        }}
+                        validationSchema={payoutSchema}
+                        onSubmit={async (values) => {
+                          setActionError('');
+                          setActionMessage('');
+                          if (!wallet?.bankName || !wallet?.accountNumber || !wallet?.accountName) {
+                            setActionError('Please save your Nigerian bank account details above first.');
+                            return;
+                          }
+                          try {
+                            const res = await requestPayoutMutation.mutateAsync({
+                              amount: Number(values.amount),
+                              bankName: wallet.bankName,
+                              accountNumber: wallet.accountNumber,
+                              accountName: wallet.accountName,
+                            });
+                            setActionMessage(res.message);
+                          } catch (err) {
+                            setActionError(
+                              err instanceof Error ? err.message : 'Unable to request payout.'
+                            );
+                          }
+                        }}
+                      >
+                        {() => (
+                          <Form className="space-y-4">
+                            <FormikField
+                              name="amount"
+                              type="number"
+                              label="Withdrawal Amount (NGN)"
+                              placeholder="2000"
+                            />
+                            <AppButton
+                              type="submit"
+                              variant="primary"
+                              size="lg"
+                              fullWidth
+                              loading={requestPayoutMutation.isPending}
+                              disabled={Number(wallet?.availableBalance ?? 0) < 2000}
+                            >
+                              Request Bank Payout
+                            </AppButton>
+                          </Form>
+                        )}
+                      </Formik>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Payout History & Ledger */}
+                  <div className="lg:col-span-6 space-y-6">
+                    <div className="bg-white border border-border rounded-[20px] p-6 space-y-4">
+                      <CustomText type="title-md" as="h3" className="font-bold text-ink">
+                        Payout Requests
+                      </CustomText>
+                      {!wallet?.payoutRequests?.length ? (
+                        <p className="text-xs text-slate py-4">
+                          No payout withdrawals requested yet.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {wallet.payoutRequests.map((p) => (
+                            <div
+                              key={p.id}
+                              className="flex items-center justify-between p-3.5 rounded-xl bg-surface border border-border text-xs"
+                            >
+                              <div>
+                                <span className="font-bold text-ink block">
+                                  ₦{Number(p.amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                                </span>
+                                <span className="text-slate text-[11px]">
+                                  {p.bank_name} · {p.account_number}
+                                </span>
+                              </div>
+                              <span className="px-2.5 py-1 rounded-full bg-white border border-border text-[10px] font-bold uppercase">
+                                {p.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white border border-border rounded-[20px] p-6 space-y-4">
+                      <CustomText type="title-md" as="h3" className="font-bold text-ink">
+                        Escrow &amp; Wallet Ledger
+                      </CustomText>
+                      {!wallet?.transactions?.length ? (
+                        <p className="text-xs text-slate py-4">
+                          Escrow holds and releases will appear here as members join and confirm access.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {wallet.transactions.map((t) => (
+                            <div
+                              key={t.id}
+                              className="flex items-center justify-between p-3.5 rounded-xl bg-surface border border-border text-xs"
+                            >
+                              <div>
+                                <span className="font-semibold text-ink block">
+                                  {t.description || t.type.replace(/_/g, ' ')}
+                                </span>
+                                <span className="text-[10px] text-dust font-mono">
+                                  {new Date(t.created_at).toLocaleDateString('en-NG', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                  })}
+                                </span>
+                              </div>
+                              <span className="font-bold font-numeric-tabular text-gt-green">
+                                ₦{Number(t.amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </section>
       </div>
+
+      {/* Report a Problem (Dispute) Modal (PRD Section 8.7 / F-41) */}
+      <AnimatePresence>
+        {disputeTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDisputeTarget(null)}
+              className="fixed inset-0 bg-ink/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative z-10 w-full max-w-md bg-white border border-border rounded-[24px] p-6 sm:p-8 shadow-2xl space-y-5 text-left"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-rose-600 font-bold">
+                    Escrow Dispute Protection
+                  </span>
+                  <CustomText type="title-lg" as="h3" className="font-bold text-ink mt-0.5">
+                    Report a Problem ({disputeTarget.planName})
+                  </CustomText>
+                </div>
+                <button
+                  onClick={() => setDisputeTarget(null)}
+                  className="p-1.5 rounded-full hover:bg-surface text-slate"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <Formik
+                initialValues={{
+                  reason: 'no_invite',
+                  description: '',
+                }}
+                validationSchema={disputeSchema}
+                onSubmit={async (values) => {
+                  setActionError('');
+                  setActionMessage('');
+                  try {
+                    const res = await openDisputeMutation.mutateAsync({
+                      membershipId: disputeTarget.membershipId,
+                      reason: values.reason,
+                      description: values.description,
+                    });
+                    setActionMessage(res.message);
+                    setDisputeTarget(null);
+                  } catch (err) {
+                    setActionError(
+                      err instanceof Error ? err.message : 'Unable to submit dispute.'
+                    );
+                  }
+                }}
+              >
+                {({ values, setFieldValue }) => (
+                  <Form className="space-y-4">
+                    <CustomField
+                      as="select"
+                      label="Issue Category"
+                      value={values.reason}
+                      options={[
+                        { label: 'Host has not sent official invite', value: 'no_invite' },
+                        { label: 'Official invite link failed / expired', value: 'invite_failed' },
+                        { label: 'Access was revoked during billing cycle', value: 'access_revoked' },
+                        { label: 'Plan does not match listing description', value: 'wrong_plan' },
+                        { label: 'Other issue', value: 'other' },
+                      ]}
+                      onChange={(val) => setFieldValue('reason', String(val))}
+                    />
+
+                    <FormikField
+                      name="description"
+                      as="textarea"
+                      label="Describe what happened"
+                      placeholder="Include details so Trust & Safety can verify and issue your refund or resolution."
+                    />
+
+                    <div className="flex gap-3 pt-2">
+                      <AppButton
+                        type="button"
+                        variant="secondary-outline"
+                        fullWidth
+                        onPress={() => setDisputeTarget(null)}
+                      >
+                        Cancel
+                      </AppButton>
+                      <AppButton
+                        type="submit"
+                        variant="danger"
+                        fullWidth
+                        loading={openDisputeMutation.isPending}
+                      >
+                        Freeze Escrow &amp; Submit
+                      </AppButton>
+                    </div>
+                  </Form>
+                )}
+              </Formik>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <ListingDetailModal
         listing={selectedListing}
@@ -840,5 +1496,19 @@ export default function MyDashboard() {
         }}
       />
     </div>
+  );
+}
+
+export default function MyDashboard() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-off-white">
+          <div className="w-8 h-8 border-2 border-ink border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }

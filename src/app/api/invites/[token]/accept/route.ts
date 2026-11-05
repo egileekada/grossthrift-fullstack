@@ -1,11 +1,17 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/server/supabaseAdmin'
+import {
+  getPaystackSecret,
+  getPlatformFeePercent,
+  initializePaystackTransaction,
+} from '@/lib/server/paystack'
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: { token: string } },
 ) {
   if (!TOKEN_PATTERN.test(params.token)) {
@@ -18,15 +24,8 @@ export async function POST(
     error: authError,
   } = await supabase.auth.getUser()
 
-  if (authError || !user) {
+  if (authError || !user || !user.email) {
     return NextResponse.json({ error: 'Sign in first' }, { status: 401 })
-  }
-
-  if (!user.email_confirmed_at) {
-    return NextResponse.json(
-      { error: 'Verify your email before joining a listing' },
-      { status: 403 },
-    )
   }
 
   const tokenHash = createHash('sha256').update(params.token).digest('hex')
@@ -56,14 +55,86 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status })
   }
 
+  const hold = Array.isArray(data) ? data[0] : data
+  const feePercent = getPlatformFeePercent() ?? 10
+  const seatAmountMinor = Math.round(Number(hold.price_per_seat) * 100)
+  const feeAmountMinor = Math.round((seatAmountMinor * feePercent) / 100)
+  const amountMinor = seatAmountMinor + feeAmountMinor
+
+  let authorizationUrl: string | undefined
+  let reference: string | undefined
+
+  if (
+    getPaystackSecret() &&
+    (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ) {
+    try {
+      const admin = createAdminClient()
+      const { data: listing } = await admin
+        .from('listings')
+        .select('id, host_id, currency')
+        .eq('id', hold.listing_id)
+        .maybeSingle()
+
+      reference = `gt-${randomUUID()}`
+      await admin.from('payments').insert({
+        membership_id: hold.id,
+        listing_id: hold.listing_id,
+        member_id: user.id,
+        host_id: listing?.host_id ?? null,
+        provider: 'paystack',
+        provider_reference: reference,
+        currency: 'NGN',
+        seat_amount_minor: seatAmountMinor,
+        fee_amount_minor: feeAmountMinor,
+        amount_minor: amountMinor,
+        fee_percent: feePercent,
+        status: 'pending',
+      })
+
+      const callbackUrl = new URL('/api/payments/paystack/callback', request.url).toString()
+      const initialized = await initializePaystackTransaction({
+        email: user.email,
+        amountMinor,
+        reference,
+        callbackUrl,
+        metadata: {
+          payment_reference: reference,
+          membership_id: hold.id,
+          listing_id: hold.listing_id,
+          member_id: user.id,
+        },
+      })
+
+      if (initialized.data?.authorization_url) {
+        authorizationUrl = initialized.data.authorization_url
+        await admin
+          .from('payments')
+          .update({
+            authorization_url: authorizationUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('provider_reference', reference)
+      }
+    } catch (err) {
+      console.warn('Invite accept Paystack init warning:', err)
+    }
+  }
+
   return NextResponse.json(
     {
       data: {
-        id: data.id,
-        listing_id: data.listing_id,
-        status: data.status,
-        price_per_seat: data.price_per_seat,
-        seat_expires_at: data.seat_expires_at,
+        id: hold.id,
+        listing_id: hold.listing_id,
+        status: hold.status,
+        price_per_seat: hold.price_per_seat,
+        seat_expires_at: hold.seat_expires_at,
+        authorizationUrl,
+        reference,
+        seatAmountMinor,
+        feeAmountMinor,
+        amountMinor,
+        feePercent,
       },
       next: 'checkout',
     },

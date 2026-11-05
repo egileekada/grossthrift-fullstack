@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
+import { createInAppNotification, sendTransactionalEmail } from '@/lib/server/email';
 
 type PaystackEnvelope<T> = { status: boolean; message?: string; data?: T };
 
@@ -96,7 +97,7 @@ export async function reconcilePaystackReference(reference: string) {
   const admin = createAdminClient();
   const { data: payment, error: paymentError } = await admin
     .from('payments')
-    .select('amount_minor,currency,status')
+    .select('id,membership_id,listing_id,member_id,host_id,seat_amount_minor,amount_minor,currency,status')
     .eq('provider_reference', reference)
     .maybeSingle();
   if (paymentError || !payment) throw new Error('Payment record not found.');
@@ -114,6 +115,64 @@ export async function reconcilePaystackReference(reference: string) {
       p_currency: transaction.currency,
     });
     if (error) throw new Error('Could not settle the verified Paystack payment.');
+
+    if (state === 'held') {
+      // Credit held balance / log hold_in transaction and notify host & member
+      const seatAmountNaira = Number(payment.seat_amount_minor) / 100;
+      if (payment.host_id) {
+        try {
+          const { data: wallet } = await admin
+            .from('wallets')
+            .select('held_balance,available_balance')
+            .eq('user_id', payment.host_id)
+            .maybeSingle();
+          await admin.from('wallets').upsert(
+            {
+              user_id: payment.host_id,
+              held_balance: Number(wallet?.held_balance ?? 0) + seatAmountNaira,
+              available_balance: Number(wallet?.available_balance ?? 0),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id' }
+          );
+          await admin.from('wallet_transactions').insert({
+            user_id: payment.host_id,
+            membership_id: payment.membership_id,
+            payment_id: payment.id,
+            type: 'hold_in',
+            amount: seatAmountNaira,
+            status: 'completed',
+            description: 'Member seat payment held in escrow',
+          });
+        } catch {
+          // Optional wallet ledger sync
+        }
+
+        await createInAppNotification({
+          userId: payment.host_id,
+          type: 'payment_held',
+          title: 'New member paid — send official invite within 24h',
+          body: `₦${seatAmountNaira.toFixed(2)} is held in escrow. Invite the member via the provider's official invitation flow and mark "Official Invite Sent" on your dashboard.`,
+          link: '/dashboard',
+        });
+
+        try {
+          const { data: hostAuth } = await admin.auth.admin.getUserById(payment.host_id);
+          if (hostAuth?.user?.email) {
+            await sendTransactionalEmail({
+              to: hostAuth.user.email,
+              subject: 'New GrossThrift Member Paid — Send Official Invite Within 24h',
+              heading: 'A member just paid for a seat in your split!',
+              body: `₦${seatAmountNaira.toFixed(2)} is now held safely in escrow. Please send their official provider invitation within 24 hours and click "Mark Official Invite Sent" in your Host Dashboard.`,
+              ctaLabel: 'Open Host Dashboard',
+              ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/dashboard`,
+            });
+          }
+        } catch {
+          // Non-blocking email notification
+        }
+      }
+    }
 
     if (state === 'refund_due') {
       const { data: claimed, error: claimError } = await admin.rpc('claim_paystack_refund', {

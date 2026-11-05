@@ -268,6 +268,226 @@ export const listingsApi = {
 
   markNotificationRead: (id: string) =>
     httpService.patch<{ data: AppNotification }>(`/notifications/${id}`),
+
+  updateListing: (
+    id: string,
+    payload: {
+      description?: string;
+      rules?: string;
+      totalCost?: number;
+      visibility?: 'public' | 'private';
+      status?: 'active' | 'cancelled';
+    }
+  ) => httpService.patch<{ data: Listing }>(`/listings/${id}`, payload),
+
+  createInviteLink: (
+    listingId: string,
+    payload: { expires_in_hours: number; max_uses: number }
+  ) =>
+    httpService.post<{
+      data: {
+        id: string;
+        listing_id: string;
+        status: string;
+        expires_at: string;
+        max_uses: number;
+        use_count: number;
+        created_at: string;
+        invite_url: string;
+      };
+    }>(`/listings/${listingId}/invites`, payload),
+
+  revokeInviteLink: (listingId: string, inviteId: string) =>
+    httpService.post<{ data: { id: string; status: string } }>(
+      `/listings/${listingId}/invites/${inviteId}/revoke`
+    ),
+};
+
+export interface DashboardMembershipItem {
+  id: string;
+  listingId: string;
+  memberId: string;
+  hostId: string;
+  isHost: boolean;
+  planName: string;
+  category: string;
+  billingCycle: string;
+  pricePerSeat: number;
+  status: string;
+  seatExpiresAt: string | null;
+  invitationSentAt: string | null;
+  accessConfirmedAt: string | null;
+  createdAt: string;
+  memberName: string;
+  memberEmail: string;
+  memberAvatar: string | null;
+  hostName: string;
+  authorizationUrl: string | null;
+  paymentStatus: string | null;
+  paymentReference: string | null;
+}
+
+export interface DashboardInviteItem {
+  id: string;
+  listing_id: string;
+  status: string;
+  expires_at: string;
+  max_uses: number;
+  use_count: number;
+  created_at: string;
+  revoked_at?: string | null;
+}
+
+export interface DashboardWalletState {
+  availableBalance: number;
+  heldBalance: number;
+  currency: 'NGN';
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  transactions: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    status: string;
+    description?: string;
+    created_at: string;
+  }>;
+  payoutRequests: Array<{
+    id: string;
+    amount: number;
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+    status: string;
+    created_at: string;
+  }>;
+}
+
+export interface DashboardResponse {
+  memberships: DashboardMembershipItem[];
+  invites: DashboardInviteItem[];
+  wallet: DashboardWalletState;
+  disputes: Array<{
+    id: string;
+    membership_id: string;
+    listing_id: string;
+    reason: string;
+    description: string;
+    status: string;
+    resolution_note?: string;
+    created_at: string;
+  }>;
+  ratings: Array<{
+    id: string;
+    membership_id: string;
+    stars: number;
+    comment?: string;
+  }>;
+}
+
+export interface PrivateInvitePreview {
+  listing_id: string;
+  service_name: string;
+  service_category: string;
+  service_logo_url: string | null;
+  plan_type: string;
+  total_cost: number;
+  billing_cycle: string;
+  seats_open: number;
+  price_per_seat: number;
+  description: string | null;
+  rules: string | null;
+  host_type: string;
+  host_display_name: string | null;
+  host_avatar_url: string | null;
+  host_rating_avg: number | null;
+  host_completed_splits: number;
+  expires_at: string;
+  uses_remaining: number;
+}
+
+export const prdApi = {
+  getDashboard: () => httpService.get<DashboardResponse>('/dashboard'),
+
+  markMemberInvited: (membershipId: string) =>
+    httpService.post<{ message: string }>(`/memberships/${membershipId}/mark-invited`),
+
+  confirmMemberAccess: (membershipId: string) =>
+    httpService.post<{ message: string }>(`/memberships/${membershipId}/confirm-access`),
+
+  leaveSplit: (membershipOrListingId: string) =>
+    httpService.post<{ message: string }>(`/memberships/${membershipOrListingId}/leave`),
+
+  saveBankDetails: (payload: {
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+  }) =>
+    httpService.patch<{
+      message: string;
+      data: { bankName: string; accountNumber: string; accountName: string };
+    }>('/wallet', payload),
+
+  requestPayout: (payload: {
+    amount: number;
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+  }) => httpService.post<{ message: string }>('/wallet', payload),
+
+  openDispute: (payload: {
+    membershipId: string;
+    reason: string;
+    description: string;
+  }) => httpService.post<{ message: string }>('/disputes', payload),
+
+  submitRating: (payload: {
+    membershipId: string;
+    stars: number;
+    comment?: string;
+  }) => httpService.post<{ message: string }>('/ratings', payload),
+
+  getInvitePreview: (token: string) =>
+    httpService.get<{ data: PrivateInvitePreview }>(`/invites/${token}`),
+
+  acceptInvite: (token: string) =>
+    httpService.post<{
+      data: {
+        id: string;
+        listing_id: string;
+        status: string;
+        price_per_seat: number;
+        seat_expires_at: string;
+        authorizationUrl?: string;
+        reference?: string;
+        seatAmountMinor?: number;
+        feeAmountMinor?: number;
+        amountMinor?: number;
+        feePercent?: number;
+      };
+      next: string;
+    }>(`/invites/${token}/accept`),
+
+  getAdminOverview: () =>
+    httpService.get<{
+      listings: Array<Record<string, unknown>>;
+      memberships: Array<Record<string, unknown>>;
+      payments: Array<Record<string, unknown>>;
+      disputes: Array<Record<string, unknown>>;
+      payouts: Array<Record<string, unknown>>;
+    }>('/admin'),
+
+  runAdminAction: (payload: Record<string, unknown>) =>
+    httpService.post<{ message: string; data?: unknown }>('/admin', payload),
+
+  runCronReconcile: () =>
+    httpService.get<{
+      reconciledAt: string;
+      expiredHoldsReleased: number;
+      autoConfirmedAfter48h: number;
+      overdueHostInvites24h: number;
+    }>('/cron/reconcile'),
 };
 
 export default httpService;

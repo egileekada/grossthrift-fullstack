@@ -158,6 +158,7 @@ export default function CustomField<T = unknown>({
             {/* SELECT */}
             {as === "select" && (
                 <Select
+                    disallowEmptySelection={!multiple}
                     selectedKeys={
                         multiple
                             ? new Set(Array.isArray(inputValue) ? (inputValue as string[]) : [])
@@ -171,7 +172,9 @@ export default function CustomField<T = unknown>({
                             handleChange(selected);
                         } else {
                             const selected = Array.from(keys)[0];
-                            handleChange(selected ? String(selected) : "");
+                            if (selected !== undefined) {
+                                handleChange(String(selected));
+                            }
                         }
                         onBlur?.();
                     }}

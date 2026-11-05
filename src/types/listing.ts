@@ -48,6 +48,9 @@ export interface Listing {
   countryFlag?: string;
   rules?: string;
   billingCycle?: string;
+  visibility?: 'public' | 'private';
+  hostType?: 'official' | 'community';
+  sharingPolicyNote?: string;
   serviceId?: string;
   platformFeePercent?: number;
   platformFeeAmount?: number;
@@ -83,11 +86,12 @@ export type CreateListingInput = {
   slotsTotal: number;
   currency?: Currency;
   description?: string;
-  contactMethod: 'WhatsApp' | 'Email';
-  contactValue: string;
+  contactMethod?: 'WhatsApp' | 'Email';
+  contactValue?: string;
   logoEmoji?: string;
   rules?: string;
   billingCycle?: string;
+  visibility?: 'public' | 'private';
   serviceId?: string;
   hostAttested?: boolean;
 };

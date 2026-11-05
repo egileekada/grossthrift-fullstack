@@ -18,6 +18,7 @@ import {
   UpdatePasswordResponse,
   JoinListingPayload,
   JoinListingResponse,
+  prdApi,
 } from '@/lib/httpService';
 import { CreateListingInput, Listing } from '@/types/listing';
 
@@ -141,6 +142,128 @@ export function useJoinListingMutation() {
   >({
     mutationFn: ({ listingId, payload }) => listingsApi.join(listingId, payload),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useDashboardQuery(enabled = true) {
+  return useQuery({
+    queryKey: ['dashboard'],
+    queryFn: () => prdApi.getDashboard(),
+    enabled,
+  });
+}
+
+export function useMarkInvitedMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (membershipId: string) => prdApi.markMemberInvited(membershipId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['listings'] });
+    },
+  });
+}
+
+export function useConfirmAccessMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (membershipId: string) => prdApi.confirmMemberAccess(membershipId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['listings'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+    },
+  });
+}
+
+export function useLeaveSplitMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => prdApi.leaveSplit(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['listings'] });
+    },
+  });
+}
+
+export function useCreateInviteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      listingId,
+      expires_in_hours,
+      max_uses,
+    }: {
+      listingId: string;
+      expires_in_hours: number;
+      max_uses: number;
+    }) => listingsApi.createInviteLink(listingId, { expires_in_hours, max_uses }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['listings'] });
+    },
+  });
+}
+
+export function useRevokeInviteMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ listingId, inviteId }: { listingId: string; inviteId: string }) =>
+      listingsApi.revokeInviteLink(listingId, inviteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useSaveBankDetailsMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { bankName: string; accountNumber: string; accountName: string }) =>
+      prdApi.saveBankDetails(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useRequestPayoutMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      amount: number;
+      bankName: string;
+      accountNumber: string;
+      accountName: string;
+    }) => prdApi.requestPayout(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useOpenDisputeMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { membershipId: string; reason: string; description: string }) =>
+      prdApi.openDispute(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useSubmitRatingMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { membershipId: string; stars: number; comment?: string }) =>
+      prdApi.submitRating(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['listings'] });
     },
   });

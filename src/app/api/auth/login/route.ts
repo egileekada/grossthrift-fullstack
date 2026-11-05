@@ -37,11 +37,6 @@ export async function POST(request: Request) {
     )
   }
 
-  if (!data.user.email_confirmed_at) {
-    await supabase.auth.signOut()
-    return NextResponse.json({ error: 'Confirm your email before signing in.' }, { status: 403 })
-  }
-
   const user = await getAuthenticatedUser()
   if (!user) {
     await supabase.auth.signOut()

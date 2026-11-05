@@ -1,5 +1,79 @@
 import { createClient } from '@/lib/supabase/server';
-import { Category, Currency, User } from '@/types/listing';
+import { createAdminClient } from '@/lib/server/supabaseAdmin';
+import { Category, Currency, ServiceCatalogItem, User } from '@/types/listing';
+
+export const DEFAULT_LAUNCH_SERVICES: Array<{
+  name: string;
+  category: Category;
+  sharing_policy_note: string;
+}> = [
+  {
+    name: 'Netflix',
+    category: 'Streaming',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
+  },
+  {
+    name: 'Spotify',
+    category: 'Streaming',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
+  },
+  {
+    name: 'YouTube',
+    category: 'Streaming',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
+  },
+  {
+    name: 'ChatGPT',
+    category: 'AI Tools',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow adding the intended members. Never share account passwords.',
+  },
+  {
+    name: 'Adobe',
+    category: 'Productivity',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow adding the intended members. Use the provider’s official invitation flow.',
+  },
+  {
+    name: 'Canva',
+    category: 'Productivity',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow adding the intended members. Use the provider’s official invitation flow.',
+  },
+  {
+    name: 'Microsoft 365',
+    category: 'Productivity',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow sharing with family/group members via official Microsoft invitations.',
+  },
+  {
+    name: 'Apple One',
+    category: 'Storage',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow Apple Family Sharing invitations.',
+  },
+  {
+    name: 'Xbox',
+    category: 'Gaming',
+    sharing_policy_note:
+      'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
+  },
+  {
+    name: 'NordVPN',
+    category: 'Security',
+    sharing_policy_note:
+      'Only list a multi-user plan whose terms allow seat invitations. Never share primary account passwords.',
+  },
+  {
+    name: 'Notion',
+    category: 'Productivity',
+    sharing_policy_note:
+      'Only list workspace plans that officially support adding members via workspace invitation.',
+  },
+];
 
 // Kept as a compatible server-side shape for API responses. Credentials and
 // profile data are owned by Supabase Auth and Postgres, never a local file.
@@ -22,6 +96,120 @@ export function isSupabaseConfigured(): boolean {
   );
 }
 
+export async function ensureUserProfile(user: {
+  id: string;
+  name: string;
+  avatar?: string;
+  phone?: string;
+}): Promise<void> {
+  const clients = [
+    createClient(),
+    ...(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? [createAdminClient()]
+      : []),
+  ];
+
+  for (const client of clients) {
+    try {
+      const { data: existing, error: readErr } = await client
+        .from('profiles')
+        .select('id, display_name')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!readErr && existing?.display_name?.trim()) {
+        break;
+      }
+
+      const { error: upsertErr } = await client.from('profiles').upsert(
+        {
+          id: user.id,
+          display_name: user.name || 'Member',
+          avatar_url: user.avatar || null,
+        },
+        { onConflict: 'id' }
+      );
+
+      if (!upsertErr) {
+        break;
+      }
+    } catch (err) {
+      console.warn('ensureUserProfile warning:', err);
+    }
+  }
+
+  for (const client of clients) {
+    try {
+      const { data: existingPrivate, error: privReadErr } = await client
+        .from('profile_private')
+        .select('user_id, phone')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!privReadErr && existingPrivate?.phone?.trim()) {
+        break;
+      }
+
+      const { error: privUpsertErr } = await client.from('profile_private').upsert(
+        {
+          user_id: user.id,
+          phone: user.phone?.trim() || existingPrivate?.phone || '+2340000000000',
+        },
+        { onConflict: 'user_id' }
+      );
+
+      if (!privUpsertErr) {
+        break;
+      }
+    } catch {
+      // Ignore if profile_private does not exist or is restricted
+    }
+  }
+}
+
+export async function ensureServiceCatalog(): Promise<ServiceCatalogItem[]> {
+  const supabase = createClient();
+  const { data: existing } = await supabase
+    .from('services')
+    .select('id,name,category,logo_url,sharing_policy_note')
+    .eq('is_active', true)
+    .order('name');
+
+  const currentList = (existing ?? []) as ServiceCatalogItem[];
+  const existingNames = new Set(currentList.map((s) => s.name.toLowerCase()));
+  const missing = DEFAULT_LAUNCH_SERVICES.filter(
+    (seed) => !existingNames.has(seed.name.toLowerCase())
+  );
+
+  if (
+    missing.length > 0 &&
+    (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ) {
+    try {
+      const admin = createAdminClient();
+      await admin.from('services').insert(
+        missing.map((item) => ({
+          name: item.name,
+          category: item.category,
+          logo_url: null,
+          sharing_policy_note: item.sharing_policy_note,
+          is_active: true,
+        }))
+      );
+      const { data: refreshed } = await admin
+        .from('services')
+        .select('id,name,category,logo_url,sharing_policy_note')
+        .eq('is_active', true)
+        .order('name');
+      if (refreshed) return refreshed as ServiceCatalogItem[];
+    } catch (err) {
+      console.warn('ensureServiceCatalog seed warning:', err);
+    }
+  }
+
+  return currentList;
+}
+
 export async function getAuthenticatedUser(): Promise<StoredUser | null> {
   if (!isSupabaseConfigured()) return null;
 
@@ -32,7 +220,7 @@ export async function getAuthenticatedUser(): Promise<StoredUser | null> {
       error,
     } = await supabase.auth.getUser();
 
-    if (error || !user?.email || !user.email_confirmed_at) return null;
+    if (error || !user?.email) return null;
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -52,6 +240,10 @@ export async function getAuthenticatedUser(): Promise<StoredUser | null> {
       `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
     const createdAt = user.created_at || new Date().toISOString();
 
+    if (!profile) {
+      await ensureUserProfile({ id: user.id, name, avatar });
+    }
+
     return {
       id: user.id,
       name,
@@ -61,7 +253,7 @@ export async function getAuthenticatedUser(): Promise<StoredUser | null> {
           ? metadata.phone.trim()
           : undefined,
       avatar,
-      isVerified: true,
+      isVerified: Boolean(user.email_confirmed_at),
       memberSince: new Date(createdAt).toLocaleDateString('en-NG', {
         month: 'short',
         year: 'numeric',

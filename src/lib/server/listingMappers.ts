@@ -19,6 +19,7 @@ type DiscoveryRow = {
   service_name: string;
   service_category: string;
   service_logo_url: string | null;
+  sharing_policy_note?: string | null;
   host_display_name: string | null;
   host_avatar_url: string | null;
   host_completed_splits: number | null;
@@ -31,7 +32,7 @@ export function mapDiscoveryListing(
   identity?: { hostId?: string; currency?: string | null }
 ): Listing {
   const category = row.service_category as Category;
-  const currency = (identity?.currency ?? row.currency ?? 'USD') as Currency;
+  const currency = (identity?.currency ?? row.currency ?? 'NGN') as Currency;
   const slotsTotal = Number(row.seats_total);
   const seatsOpen = Number(row.seats_open);
   const platformFeePercent = currency === 'NGN' ? getPlatformFeePercent() : null;
@@ -39,6 +40,7 @@ export function mapDiscoveryListing(
   const platformFeeAmount = platformFeePercent === null
     ? undefined
     : Math.round(seatAmountMinor * platformFeePercent / 100) / 100;
+  const hostName = row.host_display_name || 'GrossThrift member';
 
   return {
     id: row.id,
@@ -49,9 +51,11 @@ export function mapDiscoveryListing(
     slotsFilled: Math.max(0, slotsTotal - seatsOpen),
     currency,
     description: row.description ?? '',
-    hostName: row.host_display_name || 'GrossThrift member',
-    hostAvatar: row.host_avatar_url || '',
-    hostVerified: row.host_type === 'official',
+    hostName,
+    hostAvatar:
+      row.host_avatar_url ||
+      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(hostName)}`,
+    hostVerified: row.host_type === 'official' || Boolean(row.host_display_name),
     hostId: identity?.hostId ?? row.host_id ?? '',
     hostJoined: '',
     hostSuccessfulSplits: Number(row.host_completed_splits ?? 0),
@@ -62,6 +66,9 @@ export function mapDiscoveryListing(
     countryFlag: undefined,
     rules: row.rules ?? undefined,
     billingCycle: row.billing_cycle,
+    visibility: row.visibility === 'private' ? 'private' : 'public',
+    hostType: row.host_type === 'official' ? 'official' : 'community',
+    sharingPolicyNote: row.sharing_policy_note ?? undefined,
     serviceId: row.service_id,
     platformFeePercent: platformFeePercent ?? undefined,
     platformFeeAmount,
