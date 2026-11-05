@@ -49,6 +49,9 @@ export interface Listing {
   rules?: string;
   billingCycle?: string;
   serviceId?: string;
+  platformFeePercent?: number;
+  platformFeeAmount?: number;
+  checkoutTotal?: number;
 }
 
 export interface JoinRequest {
@@ -86,6 +89,7 @@ export type CreateListingInput = {
   rules?: string;
   billingCycle?: string;
   serviceId?: string;
+  hostAttested?: boolean;
 };
 
 export interface ServiceCatalogItem {

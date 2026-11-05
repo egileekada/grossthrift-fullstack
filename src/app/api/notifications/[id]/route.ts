@@ -1,27 +1,11 @@
 import { NextResponse } from 'next/server';
-import { readDb, writeDb, getAuthenticatedUser } from '@/lib/server/db';
+import { getAuthenticatedUser } from '@/lib/server/db';
 
-export async function PATCH(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
-  const authUser = getAuthenticatedUser();
-  if (!authUser) {
-    return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
-  }
-
-  const db = readDb();
-  const idx = db.notifications.findIndex(
-    (n) => n.id === params.id && n.userId === authUser.id
+export async function PATCH() {
+  const user = await getAuthenticatedUser();
+  if (!user) return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
+  return NextResponse.json(
+    { error: 'Notifications are not yet backed by a Supabase table.' },
+    { status: 501 },
   );
-
-  if (idx === -1) {
-    return NextResponse.json({ error: 'Notification not found.' }, { status: 404 });
-  }
-
-  db.notifications[idx].read = true;
-  writeDb(db);
-
-  return NextResponse.json({ data: db.notifications[idx] });
 }
-

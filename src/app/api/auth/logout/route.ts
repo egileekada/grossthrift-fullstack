@@ -1,18 +1,12 @@
 import { NextResponse } from 'next/server';
-import { clearSession, isSupabaseConfigured } from '@/lib/server/db';
 import { createClient } from '@/lib/supabase/server';
 
 export async function POST() {
-  clearSession();
-
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-    } catch {
-      // Ignore if Supabase is not reachable
-    }
+  const supabase = createClient();
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error('POST /api/auth/logout failed:', error.message);
+    return NextResponse.json({ error: 'Could not sign out. Please try again.' }, { status: 500 });
   }
-
   return NextResponse.json({ message: 'Signed out.' });
 }

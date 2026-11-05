@@ -1,138 +1,141 @@
 import { NextResponse } from 'next/server';
-import {
-  readDb,
-  writeDb,
-  getAuthenticatedUser,
-  createSession,
-  toPublicUser,
-} from '@/lib/server/db';
+import { getAuthenticatedUser, toPublicUser } from '@/lib/server/db';
+import { createClient } from '@/lib/supabase/server';
+
+const allowedFields = new Set([
+  'display_name',
+  'avatar_url',
+  'bio',
+  'phone',
+  'country',
+  'country_flag',
+  'verification_method',
+  'verification_detail',
+]);
 
 export async function GET() {
-  const user = getAuthenticatedUser();
-
+  const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: 'Sign in to view your profile.' }, { status: 401 });
   }
 
+  const supabase = createClient();
+  const [{ data: authResult }, { data: profile, error: profileError }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase
+      .from('profiles')
+      .select('display_name,avatar_url,bio,rating_avg,completed_splits')
+      .eq('id', user.id)
+      .maybeSingle(),
+  ]);
+
+  if (profileError) {
+    console.error('GET /api/profile failed:', profileError.message);
+    return NextResponse.json({ error: 'Could not load your profile.' }, { status: 500 });
+  }
+
+  const metadata = (authResult.user?.user_metadata ?? {}) as Record<string, unknown>;
   return NextResponse.json({
     user: toPublicUser(user),
-    profile: {
-      display_name: user.name,
-      avatar_url: user.avatar,
-      bio: null,
-      rating_avg: 5.0,
-      completed_splits: user.successfulSplits,
-    },
-    phone: user.phone ?? null,
+    profile,
+    phone: typeof metadata.phone === 'string' ? metadata.phone : null,
     metadata: {
-      country: user.country ?? 'United States',
-      countryFlag: user.countryFlag ?? '🇺🇸',
-      verificationMethod: user.verificationMethod ?? null,
-      verificationDetail: user.verificationDetail ?? null,
-      isVetted: Boolean(user.isVetted),
+      country: typeof metadata.country === 'string' ? metadata.country : 'Nigeria',
+      countryFlag: typeof metadata.country_flag === 'string' ? metadata.country_flag : '🇳🇬',
+      verificationMethod:
+        typeof metadata.verification_method === 'string' ? metadata.verification_method : null,
+      verificationDetail:
+        typeof metadata.verification_detail === 'string' ? metadata.verification_detail : null,
+      isVetted: typeof metadata.is_vetted === 'boolean' ? metadata.is_vetted : false,
     },
-  });
+  }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function PATCH(request: Request) {
   let body: Record<string, unknown>;
-
   try {
-    body = await request.json();
+    const parsed: unknown = await request.json();
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return NextResponse.json({ error: 'Send a valid profile update.' }, { status: 400 });
+    }
+    body = parsed as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: 'Send valid JSON.' }, { status: 400 });
   }
 
-  const allowedFields = [
-    'display_name',
-    'avatar_url',
-    'bio',
-    'phone',
-    'country',
-    'country_flag',
-    'verification_method',
-    'verification_detail',
-    'is_vetted',
-  ];
-
-  if (
-    Object.keys(body).length === 0 ||
-    Object.keys(body).some((key) => !allowedFields.includes(key))
-  ) {
-    return NextResponse.json(
-      { error: 'Send one or more supported profile fields.' },
-      { status: 400 }
-    );
+  if (!Object.keys(body).length || Object.keys(body).some((key) => !allowedFields.has(key))) {
+    return NextResponse.json({ error: 'Send supported profile fields only.' }, { status: 400 });
   }
 
-  const authUser = getAuthenticatedUser();
-  if (!authUser) {
+  const user = await getAuthenticatedUser();
+  if (!user) {
     return NextResponse.json({ error: 'Sign in to update your profile.' }, { status: 401 });
   }
 
-  const db = readDb();
-  const userIdx = db.users.findIndex((u) => u.id === authUser.id);
-  if (userIdx === -1) {
-    return NextResponse.json({ error: 'User profile not found.' }, { status: 404 });
+  const supabase = createClient();
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) {
+    return NextResponse.json({ error: 'Your session has expired. Sign in again.' }, { status: 401 });
   }
 
-  const user = db.users[userIdx];
-
-  if (typeof body.display_name === 'string' && body.display_name.trim()) {
-    user.name = body.display_name.trim();
-  }
-  if (typeof body.avatar_url === 'string' && body.avatar_url.trim()) {
-    user.avatar = body.avatar_url.trim();
-  }
-  if (typeof body.phone === 'string') {
-    user.phone = body.phone.trim() || undefined;
-  }
-  if (typeof body.country === 'string' && body.country.trim()) {
-    user.country = body.country.trim();
-  }
-  if (typeof body.country_flag === 'string' && body.country_flag.trim()) {
-    user.countryFlag = body.country_flag.trim();
-  }
-  if (
-    typeof body.verification_method === 'string' &&
-    ['linkedin', 'email', 'declaration'].includes(body.verification_method)
-  ) {
-    user.verificationMethod = body.verification_method as 'linkedin' | 'email' | 'declaration';
-  }
-  if (typeof body.verification_detail === 'string') {
-    user.verificationDetail = body.verification_detail.trim() || undefined;
-  }
-  if (typeof body.is_vetted === 'boolean') {
-    user.isVetted = body.is_vetted;
+  const metadataPatch: Record<string, unknown> = {};
+  for (const key of ['phone', 'country', 'country_flag', 'verification_method', 'verification_detail'] as const) {
+    if (key in body) metadataPatch[key] = body[key];
   }
 
-  // Keep host metadata in sync on listings created by this user
-  db.listings = db.listings.map((l) => {
-    if (l.hostId === user.id) {
-      return {
-        ...l,
-        hostName: user.name,
-        hostAvatar: user.avatar,
-        country: user.country,
-        countryFlag: user.countryFlag,
-      };
+  const profilePatch: Record<string, unknown> = {};
+  if (typeof body.display_name === 'string') {
+    const value = body.display_name.trim();
+    if (value.length < 2 || value.length > 100) {
+      return NextResponse.json({ error: 'Display name must be between 2 and 100 characters.' }, { status: 400 });
     }
-    return l;
-  });
+    profilePatch.display_name = value;
+    metadataPatch.display_name = value;
+    metadataPatch.name = value;
+  }
+  if (typeof body.avatar_url === 'string') {
+    profilePatch.avatar_url = body.avatar_url.trim() || null;
+    metadataPatch.avatar_url = body.avatar_url.trim() || null;
+  }
+  if (typeof body.bio === 'string') {
+    const value = body.bio.trim();
+    if (value.length > 500) {
+      return NextResponse.json({ error: 'Bio must be 500 characters or fewer.' }, { status: 400 });
+    }
+    profilePatch.bio = value || null;
+  }
 
-  db.users[userIdx] = user;
-  writeDb(db);
-  createSession(user.id);
+  if (Object.keys(profilePatch).length) {
+    const { error } = await supabase.from('profiles').upsert(
+      { id: user.id, ...profilePatch },
+      { onConflict: 'id' },
+    );
+    if (error) {
+      console.error('PATCH /api/profile profile update failed:', error.message);
+      return NextResponse.json({ error: 'Could not save your public profile.' }, { status: 500 });
+    }
+  }
 
+  if (Object.keys(metadataPatch).length) {
+    const { error } = await supabase.auth.updateUser({
+      data: { ...authData.user.user_metadata, ...metadataPatch },
+    });
+    if (error) {
+      console.error('PATCH /api/profile metadata update failed:', error.message);
+      return NextResponse.json({ error: 'Could not save your account details.' }, { status: 500 });
+    }
+  }
+
+  const updatedUser = await getAuthenticatedUser();
   return NextResponse.json({
     message: 'Profile updated.',
-    user: toPublicUser(user),
+    user: updatedUser ? toPublicUser(updatedUser) : toPublicUser(user),
     onboarding: {
-      country: user.country,
-      countryFlag: user.countryFlag,
-      verificationMethod: user.verificationMethod,
-      verificationDetail: user.verificationDetail,
-      isVetted: user.isVetted,
+      country: metadataPatch.country ?? user.country,
+      countryFlag: metadataPatch.country_flag ?? user.countryFlag,
+      verificationMethod: metadataPatch.verification_method ?? user.verificationMethod,
+      verificationDetail: metadataPatch.verification_detail ?? user.verificationDetail,
+      isVetted: user.isVetted ?? false,
     },
-  });
+  }, { headers: { 'Cache-Control': 'no-store' } });
 }

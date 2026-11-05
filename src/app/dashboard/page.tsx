@@ -208,10 +208,10 @@ export default function MyDashboard() {
             {/* Stat 1 */}
             <div className="space-y-1 flex-1 md:flex-none">
               <span className="block font-sans font-semibold text-[24px] text-ink font-numeric-tabular leading-none">
-                ${totalSpend.toFixed(2)}
+                ₦{totalSpend.toFixed(2)}
               </span>
               <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">
-                $ Spend / mo
+                ₦ Spend / mo
               </span>
             </div>
 
@@ -220,10 +220,10 @@ export default function MyDashboard() {
             {/* Stat 2 */}
             <div className="space-y-1 flex-1 md:flex-none">
               <span className="block font-sans font-semibold text-[24px] text-gt-green font-numeric-tabular leading-none">
-                ${totalSaved.toFixed(2)}
+                ₦{totalSaved.toFixed(2)}
               </span>
               <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-dust block">
-                $ Saved / mo
+                ₦ Saved / mo
               </span>
             </div>
 
@@ -315,7 +315,7 @@ export default function MyDashboard() {
                   {joinedListings.length > 0 ? (
                     joinedListings.map((listing) => {
                       const costPerPerson = listing.totalCost / listing.slotsTotal;
-                      const credentials = getPoolCredentials(listing, user.name);
+                      const credentials = getPoolCredentials(listing);
                       const isCredsExpanded = !!expandedCredentials[listing.id];
                       const isRevealed = !!revealedPasswords[listing.id];
 
@@ -340,7 +340,7 @@ export default function MyDashboard() {
                               </div>
                               <div className="text-right">
                                 <span className="text-[18px] font-semibold text-ink block font-numeric-tabular leading-none">
-                                  ${costPerPerson.toFixed(2)}
+                                  ₦{costPerPerson.toFixed(2)}
                                 </span>
                                 <span className="text-[11px] text-dust uppercase font-bold tracking-wider">
                                   per person / mo
@@ -538,7 +538,7 @@ export default function MyDashboard() {
                               </div>
                               <div className="text-right">
                                 <span className="text-[18px] font-semibold text-ink block font-numeric-tabular leading-none">
-                                  ${costPerPerson.toFixed(2)}
+                                  ₦{costPerPerson.toFixed(2)}
                                 </span>
                                 <span className="text-[11px] text-dust uppercase font-bold tracking-wider">
                                   per person / mo
