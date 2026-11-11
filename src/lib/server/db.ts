@@ -121,17 +121,25 @@ export async function ensureUserProfile(user: {
         break;
       }
 
-      const { error: upsertErr } = await client.from('profiles').upsert(
-        {
-          id: user.id,
-          display_name: user.name || 'Member',
-          avatar_url: user.avatar || null,
-        },
-        { onConflict: 'id' }
-      );
-
-      if (!upsertErr) {
-        break;
+      if (existing) {
+        const { error: updateErr } = await client
+          .from('profiles')
+          .update({
+            display_name: user.name || 'Member',
+            ...(user.avatar ? { avatar_url: user.avatar } : {}),
+          })
+          .eq('id', user.id);
+        if (!updateErr) break;
+      } else {
+        const { error: upsertErr } = await client.from('profiles').upsert(
+          {
+            id: user.id,
+            display_name: user.name || 'Member',
+            avatar_url: user.avatar || null,
+          },
+          { onConflict: 'id' }
+        );
+        if (!upsertErr) break;
       }
     } catch (err) {
       console.warn('ensureUserProfile warning:', err);
@@ -142,24 +150,28 @@ export async function ensureUserProfile(user: {
     try {
       const { data: existingPrivate, error: privReadErr } = await client
         .from('profile_private')
-        .select('user_id, phone')
-        .eq('user_id', user.id)
+        .select('id, phone')
+        .eq('id', user.id)
         .maybeSingle();
 
       if (!privReadErr && existingPrivate?.phone?.trim()) {
         break;
       }
 
-      const { error: privUpsertErr } = await client.from('profile_private').upsert(
-        {
-          user_id: user.id,
-          phone: user.phone?.trim() || existingPrivate?.phone || '+2340000000000',
-        },
-        { onConflict: 'user_id' }
-      );
+      const phoneValue =
+        user.phone?.trim() || existingPrivate?.phone?.trim() || '+2348000000000';
 
-      if (!privUpsertErr) {
-        break;
+      if (existingPrivate) {
+        const { error: privUpdateErr } = await client
+          .from('profile_private')
+          .update({ phone: phoneValue })
+          .eq('id', user.id);
+        if (!privUpdateErr) break;
+      } else {
+        const { error: privUpsertErr } = await client
+          .from('profile_private')
+          .upsert({ id: user.id, phone: phoneValue }, { onConflict: 'id' });
+        if (!privUpsertErr) break;
       }
     } catch {
       // Ignore if profile_private does not exist or is restricted
@@ -276,6 +288,50 @@ export async function getAuthenticatedUser(): Promise<StoredUser | null> {
     };
   } catch {
     return null;
+  }
+}
+
+export async function isUserAdmin(user: { id: string; email?: string }): Promise<boolean> {
+  const adminEmails = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (user.email && adminEmails.includes(user.email.toLowerCase())) {
+    return true;
+  }
+
+  try {
+    const supabase = createClient();
+    const [{ data: authData }, { data: profile }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+    ]);
+
+    if (authData?.user?.app_metadata?.role === 'admin') {
+      return true;
+    }
+    if (profile && (profile as { role?: string }).role === 'admin') {
+      return true;
+    }
+  } catch {
+    // Fall back safely if role column has not been added yet
+  }
+
+  return false;
+}
+
+export async function isUserSuspended(userId: string): Promise<boolean> {
+  try {
+    const supabase = createClient();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_suspended')
+      .eq('id', userId)
+      .maybeSingle();
+    return Boolean((profile as { is_suspended?: boolean } | null)?.is_suspended);
+  } catch {
+    return false;
   }
 }
 

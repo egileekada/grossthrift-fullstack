@@ -5,6 +5,7 @@ import {
   ensureServiceCatalog,
   ensureUserProfile,
   getAuthenticatedUser,
+  isUserSuspended,
   normalizeCategory,
   normalizeCurrency,
 } from '@/lib/server/db';
@@ -116,6 +117,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: 'Please sign in before creating a listing.' },
       { status: 401 }
+    );
+  }
+  if (!authUser.isVerified) {
+    return NextResponse.json(
+      { error: 'Please verify your email address before creating a listing.' },
+      { status: 403 }
+    );
+  }
+  if (await isUserSuspended(authUser.id)) {
+    return NextResponse.json(
+      { error: 'Your account is currently restricted from creating listings.' },
+      { status: 403 }
     );
   }
 

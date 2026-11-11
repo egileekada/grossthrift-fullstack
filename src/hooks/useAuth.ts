@@ -81,6 +81,12 @@ export function useForgotPasswordMutation() {
   });
 }
 
+export function useResendConfirmationMutation() {
+  return useMutation<PasswordResetResponse, Error, PasswordResetPayload>({
+    mutationFn: (payload) => authApi.resendConfirmation(payload),
+  });
+}
+
 export function useUpdatePasswordMutation() {
   const queryClient = useQueryClient();
 

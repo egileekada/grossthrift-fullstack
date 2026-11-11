@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
@@ -739,7 +740,7 @@ export default function CreateListingPage() {
                   </div>
 
                   {/* Host Attestation Checkbox (PRD LST-2 / F-09) */}
-                  <div className="pt-1">
+                  <div className="pt-1 space-y-1.5">
                     <CustomCheckboxGroup
                       value={termsAccepted ? ['accepted'] : []}
                       onChange={(vals) => {
@@ -754,6 +755,16 @@ export default function CreateListingPage() {
                         },
                       ]}
                     />
+                    <p className="text-[11.5px] text-slate pl-1">
+                      By publishing, you agree to the{' '}
+                      <Link href="/community-rules" className="text-gt-green font-semibold hover:underline">
+                        Community Rules
+                      </Link>{' '}
+                      and{' '}
+                      <Link href="/terms" className="text-gt-green font-semibold hover:underline">
+                        Terms of Service
+                      </Link>.
+                    </p>
                   </div>
 
                   {submitError && (

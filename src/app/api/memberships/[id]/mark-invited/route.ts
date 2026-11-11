@@ -83,7 +83,7 @@ export async function POST(
           heading: `${authUser.name} has sent your official invitation!`,
           body: `Your host has sent the official provider invitation for ${listing.plan_type}. Please accept the invitation in your account and click "I Have Access" on your GrossThrift dashboard within 48 hours (or report a problem if the invite did not work).`,
           ctaLabel: 'Confirm Access on Dashboard',
-          ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/dashboard`,
+          ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://grossthrift-fullstack.vercel.app'}/dashboard`,
         });
       }
     } catch {

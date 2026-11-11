@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -321,6 +322,21 @@ export default function ListingDetailModal({
                     <ArrowRight size={13} />
                   </button>
                 </div>
+
+                <p className="text-[10.5px] text-center text-dust leading-relaxed">
+                  Protected under our{' '}
+                  <Link href="/refund-policy" className="text-gt-green underline">
+                    Refund Policy
+                  </Link>
+                  ,{' '}
+                  <Link href="/community-rules" className="text-gt-green underline">
+                    Community Rules
+                  </Link>
+                  , and{' '}
+                  <Link href="/terms" className="text-gt-green underline">
+                    Terms
+                  </Link>.
+                </p>
               </motion.div>
             )}
             {/* Step 3: Spinning/Processing payment loader */}

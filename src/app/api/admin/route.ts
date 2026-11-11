@@ -3,6 +3,7 @@ import {
   ensureServiceCatalog,
   ensureUserProfile,
   getAuthenticatedUser,
+  isUserAdmin,
 } from '@/lib/server/db';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
@@ -11,6 +12,12 @@ export async function GET() {
   const authUser = await getAuthenticatedUser();
   if (!authUser) {
     return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
+  }
+  if (!(await isUserAdmin(authUser))) {
+    return NextResponse.json(
+      { error: 'Admin access required. Set profiles.role = "admin" or ADMIN_EMAILS.' },
+      { status: 403 }
+    );
   }
 
   const client =
@@ -53,6 +60,12 @@ export async function POST(request: Request) {
   const authUser = await getAuthenticatedUser();
   if (!authUser) {
     return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
+  }
+  if (!(await isUserAdmin(authUser))) {
+    return NextResponse.json(
+      { error: 'Admin access required. Set profiles.role = "admin" or ADMIN_EMAILS.' },
+      { status: 403 }
+    );
   }
 
   let body: Record<string, unknown>;
@@ -172,6 +185,26 @@ export async function POST(request: Request) {
       .eq('id', payoutId);
 
     return NextResponse.json({ message: 'Payout marked as paid.' });
+  }
+
+  // 4. Suspend or restore a listing / user (PRD ADM-4 / F-56)
+  if (action === 'suspend_listing' || action === 'restore_listing') {
+    const listingId = typeof body.listingId === 'string' ? body.listingId : '';
+    if (!listingId) {
+      return NextResponse.json({ error: 'Missing listingId.' }, { status: 400 });
+    }
+    const nextStatus = action === 'suspend_listing' ? 'cancelled' : 'active';
+    const { error } = await client
+      .from('listings')
+      .update({ status: nextStatus, updated_at: new Date().toISOString() })
+      .eq('id', listingId);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({
+      message: action === 'suspend_listing' ? 'Listing suspended.' : 'Listing restored to active.',
+    });
   }
 
   return NextResponse.json({ error: 'Unsupported admin action.' }, { status: 400 });

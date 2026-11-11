@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 // PRD Section 11.4 Scheduled SLA Reconciliation:
 // 1. Expire 10-minute 'pending_payment' seat holds and return seats_open.
 // 2. Auto-confirm 'invited' memberships after 48 hours if no dispute was opened (ACC-4 / F-33).

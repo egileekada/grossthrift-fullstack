@@ -7,18 +7,23 @@ import { Formik, Form } from 'formik';
 import { loginSchema, LoginFormValues } from '@/lib/validations/auth';
 import { FormikField, AppButton, CustomText } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
-import { useLoginMutation } from '@/hooks/useAuth';
-import { AlertCircle, ShieldCheck, Lock } from 'lucide-react';
+import { useLoginMutation, useResendConfirmationMutation } from '@/hooks/useAuth';
+import { AlertCircle, Check, ShieldCheck, Lock } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
 export default function LoginPage() {
   const router = useRouter();
   const { setUser } = useApp();
   const loginMutation = useLoginMutation();
+  const resendConfirmationMutation = useResendConfirmationMutation();
   const [serverError, setServerError] = useState('');
+  const [resendNotice, setResendNotice] = useState('');
+  const [lastAttemptEmail, setLastAttemptEmail] = useState('');
 
   const handleSubmit = async (values: LoginFormValues) => {
     setServerError('');
+    setResendNotice('');
+    setLastAttemptEmail(values.email.trim());
 
     try {
       const res = await loginMutation.mutateAsync({
@@ -32,6 +37,24 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unable to sign in. Please try again.';
       setServerError(msg);
+    }
+  };
+
+  const handleResendConfirmation = async (email: string) => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setServerError('Enter your email address in the field below first, then click Resend.');
+      return;
+    }
+    setServerError('');
+    setResendNotice('');
+    try {
+      const res = await resendConfirmationMutation.mutateAsync({ email: cleanEmail });
+      setResendNotice(res.message);
+    } catch (err: unknown) {
+      setServerError(
+        err instanceof Error ? err.message : 'Could not resend confirmation email.'
+      );
     }
   };
 
@@ -57,9 +80,30 @@ export default function LoginPage() {
           </div>
 
           {serverError && (
-            <div className="p-3 bg-terracotta-light/60 border border-terracotta/25 text-terracotta rounded-xl text-xs flex items-center gap-2">
-              <AlertCircle size={15} className="shrink-0" />
-              <span>{serverError}</span>
+            <div className="p-3 bg-terracotta-light/60 border border-terracotta/25 text-terracotta rounded-xl text-xs space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>{serverError}</span>
+              </div>
+              {serverError.toLowerCase().includes('confirm your email') && (
+                <button
+                  type="button"
+                  disabled={resendConfirmationMutation.isPending}
+                  onClick={() => handleResendConfirmation(lastAttemptEmail)}
+                  className="text-[11px] font-bold text-sage underline cursor-pointer disabled:opacity-50"
+                >
+                  {resendConfirmationMutation.isPending
+                    ? 'Sending confirmation email...'
+                    : 'Resend confirmation email'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {resendNotice && (
+            <div className="p-3 bg-sage-light border border-sage/25 text-sage rounded-xl text-xs flex items-center gap-2">
+              <Check size={15} className="shrink-0" />
+              <span>{resendNotice}</span>
             </div>
           )}
 

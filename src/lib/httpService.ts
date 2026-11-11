@@ -174,6 +174,12 @@ export const authApi = {
   signup: (payload: SignupPayload) =>
     httpService.post<SignupResponse, SignupPayload>('/auth/signup', payload),
 
+  resendConfirmation: (payload: PasswordResetPayload) =>
+    httpService.post<PasswordResetResponse, PasswordResetPayload>(
+      '/auth/resend-confirmation',
+      payload
+    ),
+
   logout: () =>
     httpService.post<{ message: string }>('/auth/logout'),
 

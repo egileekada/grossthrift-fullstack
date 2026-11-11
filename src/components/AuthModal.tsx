@@ -47,6 +47,7 @@ import {
   useSendPhoneOtpMutation,
   useVerifyPhoneOtpMutation,
   useOnboardingMutation,
+  useResendConfirmationMutation,
 } from '@/hooks/useAuth';
 
 interface AuthModalProps {
@@ -77,6 +78,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
   const [countdown, setCountdown] = useState(59);
   const [error, setError] = useState('');
   const [successNotice, setSuccessNotice] = useState('');
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState('');
 
   // Temp user profile storage before finishing onboarding
   const [tempUser, setTempUser] = useState<User | null>(null);
@@ -96,13 +98,15 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
   const sendPhoneOtpMutation = useSendPhoneOtpMutation();
   const verifyPhoneOtpMutation = useVerifyPhoneOtpMutation();
   const onboardingMutation = useOnboardingMutation();
+  const resendConfirmationMutation = useResendConfirmationMutation();
 
   const isBusy =
     loginMutation.isPending ||
     signupMutation.isPending ||
     sendPhoneOtpMutation.isPending ||
     verifyPhoneOtpMutation.isPending ||
-    onboardingMutation.isPending;
+    onboardingMutation.isPending ||
+    resendConfirmationMutation.isPending;
 
   // Resend countdown timer for OTP screen
   useEffect(() => {
@@ -123,6 +127,8 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
 
   const handleEmailLogin = async (values: LoginFormValues) => {
     setError('');
+    setSuccessNotice('');
+    setPendingConfirmEmail(values.email.trim());
     try {
       const res = await loginMutation.mutateAsync({
         provider: 'email',
@@ -145,6 +151,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
   const handleEmailSignup = async (values: ModalSignupFormValues) => {
     setError('');
     setSuccessNotice('');
+    setPendingConfirmEmail(values.email.trim());
     try {
       const res = await signupMutation.mutateAsync({
         name: values.name.trim(),
@@ -463,14 +470,66 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                 </div>
 
                 {error && (
-                  <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold font-sans">
-                    {error}
+                  <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-700 text-xs font-semibold font-sans space-y-1.5">
+                    <div>{error}</div>
+                    {error.toLowerCase().includes('confirm your email') && pendingConfirmEmail && (
+                      <button
+                        type="button"
+                        disabled={resendConfirmationMutation.isPending}
+                        onClick={async () => {
+                          setError('');
+                          try {
+                            const res = await resendConfirmationMutation.mutateAsync({
+                              email: pendingConfirmEmail,
+                            });
+                            setSuccessNotice(res.message);
+                          } catch (err) {
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : 'Could not resend confirmation email.'
+                            );
+                          }
+                        }}
+                        className="text-[11px] font-bold text-sage underline cursor-pointer disabled:opacity-50"
+                      >
+                        {resendConfirmationMutation.isPending
+                          ? 'Sending confirmation email...'
+                          : 'Resend confirmation email'}
+                      </button>
+                    )}
                   </div>
                 )}
 
                 {successNotice && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold font-sans">
-                    {successNotice}
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold font-sans space-y-1.5">
+                    <div>{successNotice}</div>
+                    {pendingConfirmEmail && (
+                      <button
+                        type="button"
+                        disabled={resendConfirmationMutation.isPending}
+                        onClick={async () => {
+                          setError('');
+                          try {
+                            const res = await resendConfirmationMutation.mutateAsync({
+                              email: pendingConfirmEmail,
+                            });
+                            setSuccessNotice(res.message);
+                          } catch (err) {
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : 'Could not resend confirmation email.'
+                            );
+                          }
+                        }}
+                        className="text-[11px] font-bold text-emerald-900 underline cursor-pointer disabled:opacity-50"
+                      >
+                        {resendConfirmationMutation.isPending
+                          ? 'Resending...'
+                          : 'Resend confirmation email'}
+                      </button>
+                    )}
                   </div>
                 )}
 

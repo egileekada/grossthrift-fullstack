@@ -133,7 +133,7 @@ export async function POST(
             heading: `${authUser.name} confirmed access to ${listing.plan_type}`,
             body: `Great news! Your member confirmed access, and ₦${seatPrice.toFixed(2)} has been released from escrow into your Available Wallet Balance.`,
             ctaLabel: 'View Wallet & Withdraw',
-            ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/dashboard`,
+            ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://grossthrift-fullstack.vercel.app'}/dashboard`,
           });
         }
       } catch {

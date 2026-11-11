@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getAuthenticatedUser } from '@/lib/server/db';
+import { getAuthenticatedUser, isUserSuspended } from '@/lib/server/db';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import {
   getPaystackSecret,
@@ -12,6 +12,8 @@ import {
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const authUser = await getAuthenticatedUser();
   if (!authUser) return NextResponse.json({ error: 'Verify your email and sign in before checkout.' }, { status: 401 });
+  if (!authUser.isVerified) return NextResponse.json({ error: 'Verify your email address before joining a split.' }, { status: 403 });
+  if (await isUserSuspended(authUser.id)) return NextResponse.json({ error: 'Your account is currently restricted from joining splits.' }, { status: 403 });
 
   const feePercent = getPlatformFeePercent();
   if (!getPaystackSecret() || !(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) || feePercent === null) {

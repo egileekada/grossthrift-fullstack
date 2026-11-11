@@ -7,7 +7,7 @@ import { Formik, Form } from 'formik';
 import { signupSchema, SignupFormValues } from '@/lib/validations/auth';
 import { FormikField, CustomField, AppButton, CustomText } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
-import { useSignupMutation } from '@/hooks/useAuth';
+import { useSignupMutation, useResendConfirmationMutation } from '@/hooks/useAuth';
 import { AlertCircle, Check, Lock, ShieldCheck } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 
@@ -28,13 +28,16 @@ export default function SignupPage() {
   const router = useRouter();
   const { setUser } = useApp();
   const signupMutation = useSignupMutation();
+  const resendConfirmationMutation = useResendConfirmationMutation();
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
   const [serverError, setServerError] = useState('');
   const [serverSuccess, setServerSuccess] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
 
   const handleSubmit = async (values: SignupFormValues) => {
     setServerError('');
     setServerSuccess('');
+    setPendingEmail(values.email.trim());
 
     try {
       const res = await signupMutation.mutateAsync({
@@ -88,9 +91,37 @@ export default function SignupPage() {
           )}
 
           {serverSuccess && (
-            <div className="p-3 bg-sage-light border border-sage/25 text-sage rounded-xl text-xs flex items-center gap-2">
-              <Check size={15} className="shrink-0" />
-              <span>{serverSuccess}</span>
+            <div className="p-3 bg-sage-light border border-sage/25 text-sage rounded-xl text-xs space-y-2">
+              <div className="flex items-center gap-2">
+                <Check size={15} className="shrink-0" />
+                <span>{serverSuccess}</span>
+              </div>
+              {pendingEmail && (
+                <button
+                  type="button"
+                  disabled={resendConfirmationMutation.isPending}
+                  onClick={async () => {
+                    setServerError('');
+                    try {
+                      const res = await resendConfirmationMutation.mutateAsync({
+                        email: pendingEmail,
+                      });
+                      setServerSuccess(res.message);
+                    } catch (err: unknown) {
+                      setServerError(
+                        err instanceof Error
+                          ? err.message
+                          : 'Could not resend confirmation email.'
+                      );
+                    }
+                  }}
+                  className="text-[11px] font-bold underline cursor-pointer disabled:opacity-50"
+                >
+                  {resendConfirmationMutation.isPending
+                    ? 'Resending...'
+                    : 'Resend confirmation email'}
+                </button>
+              )}
             </div>
           )}
 

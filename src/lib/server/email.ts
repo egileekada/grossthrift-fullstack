@@ -9,13 +9,24 @@ export interface TransactionalEmailInput {
   ctaUrl?: string;
 }
 
-export async function sendTransactionalEmail(input: TransactionalEmailInput): Promise<boolean> {
+export interface TransactionalEmailResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function sendTransactionalEmailWithResult(
+  input: TransactionalEmailInput
+): Promise<TransactionalEmailResult> {
   const resendKey = process.env.RESEND_KEY || process.env.RESEND_API_KEY;
-  if (!resendKey || !input.to || !input.to.includes('@')) {
-    return false;
+  if (!resendKey) {
+    return { ok: false, error: 'RESEND_KEY is not configured.' };
+  }
+  if (!input.to || !input.to.includes('@')) {
+    return { ok: false, error: 'Invalid recipient email address.' };
   }
 
   const fromAddress = process.env.RESEND_FROM_EMAIL || 'GrossThrift <onboarding@resend.dev>';
+  const replyToAddress = process.env.SUPPORT_EMAIL || 'miracle4424@gmail.com';
   const html = `
     <div style="font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #141c17; background: #ffffff; border: 1px solid #e4e9e5; border-radius: 16px;">
       <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #115c3e; margin-bottom: 12px;">
@@ -48,16 +59,36 @@ export async function sendTransactionalEmail(input: TransactionalEmailInput): Pr
       },
       body: JSON.stringify({
         from: fromAddress,
+        reply_to: replyToAddress,
         to: [input.to],
         subject: input.subject,
         html,
       }),
     });
-    return res.ok;
+
+    if (!res.ok) {
+      let message = `Resend API error (${res.status})`;
+      try {
+        const errJson = (await res.json()) as { message?: string };
+        if (errJson?.message) message = errJson.message;
+      } catch {
+        // ignore JSON parse failure
+      }
+      console.warn('Resend email delivery failed:', message);
+      return { ok: false, error: message };
+    }
+
+    return { ok: true };
   } catch (err) {
-    console.warn('Resend email delivery warning:', err);
-    return false;
+    const message = err instanceof Error ? err.message : 'Network error sending email';
+    console.warn('Resend email delivery warning:', message);
+    return { ok: false, error: message };
   }
+}
+
+export async function sendTransactionalEmail(input: TransactionalEmailInput): Promise<boolean> {
+  const result = await sendTransactionalEmailWithResult(input);
+  return result.ok;
 }
 
 export async function createInAppNotification(input: {

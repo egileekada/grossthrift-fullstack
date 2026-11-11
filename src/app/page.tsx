@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import CountUp from 'react-countup';
@@ -1182,17 +1183,18 @@ export default function LandingPage() {
             <div className="lg:col-span-2 space-y-4">
               <h4 className="text-[12px] font-bold uppercase tracking-[0.1em] text-ink">Company</h4>
               <ul className="space-y-2 text-[14px]">
-                <li><a href="#about" className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block">About us</a></li>
-                <li><a href="#blog" className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block">Blog</a></li>
-                <li><span className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block cursor-pointer">Contact support</span></li>
+                <li><Link href="/community-rules" className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block">Community Rules</Link></li>
+                <li><Link href="/faq" className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block">FAQ &amp; Support</Link></li>
+                <li><a href="mailto:miracle4424@gmail.com" className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block">Contact support</a></li>
               </ul>
             </div>
 
             <div className="lg:col-span-3 space-y-4">
               <h4 className="text-[12px] font-bold uppercase tracking-[0.1em] text-ink">Legal</h4>
               <ul className="space-y-2 text-[14px]">
-                <li><span className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block cursor-pointer">Privacy Policy</span></li>
-                <li><span className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block cursor-pointer">Terms of Service</span></li>
+                <li><Link href="/privacy" className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block">Privacy Policy</Link></li>
+                <li><Link href="/terms" className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block">Terms of Service</Link></li>
+                <li><Link href="/refund-policy" className="text-slate hover:text-gt-green dark:hover:text-emerald-400 transition-colors duration-150 py-1.5 block">Refund Policy</Link></li>
                 <li className="flex items-center gap-2 pt-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">All Systems Nominal</span>
