@@ -7,73 +7,73 @@ export const DEFAULT_LAUNCH_SERVICES: Array<{
   category: Category;
   sharing_policy_note: string;
 }> = [
-  {
-    name: 'Netflix',
-    category: 'Streaming',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
-  },
-  {
-    name: 'Spotify',
-    category: 'Streaming',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
-  },
-  {
-    name: 'YouTube',
-    category: 'Streaming',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
-  },
-  {
-    name: 'ChatGPT',
-    category: 'AI Tools',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow adding the intended members. Never share account passwords.',
-  },
-  {
-    name: 'Adobe',
-    category: 'Productivity',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow adding the intended members. Use the provider’s official invitation flow.',
-  },
-  {
-    name: 'Canva',
-    category: 'Productivity',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow adding the intended members. Use the provider’s official invitation flow.',
-  },
-  {
-    name: 'Microsoft 365',
-    category: 'Productivity',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow sharing with family/group members via official Microsoft invitations.',
-  },
-  {
-    name: 'Apple One',
-    category: 'Storage',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow Apple Family Sharing invitations.',
-  },
-  {
-    name: 'Xbox',
-    category: 'Gaming',
-    sharing_policy_note:
-      'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
-  },
-  {
-    name: 'NordVPN',
-    category: 'Security',
-    sharing_policy_note:
-      'Only list a multi-user plan whose terms allow seat invitations. Never share primary account passwords.',
-  },
-  {
-    name: 'Notion',
-    category: 'Productivity',
-    sharing_policy_note:
-      'Only list workspace plans that officially support adding members via workspace invitation.',
-  },
-];
+    {
+      name: 'Netflix',
+      category: 'Streaming',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
+    },
+    {
+      name: 'Spotify',
+      category: 'Streaming',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
+    },
+    {
+      name: 'YouTube',
+      category: 'Streaming',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
+    },
+    {
+      name: 'ChatGPT',
+      category: 'AI Tools',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow adding the intended members. Never share account passwords.',
+    },
+    {
+      name: 'Adobe',
+      category: 'Productivity',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow adding the intended members. Use the provider’s official invitation flow.',
+    },
+    {
+      name: 'Canva',
+      category: 'Productivity',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow adding the intended members. Use the provider’s official invitation flow.',
+    },
+    {
+      name: 'Microsoft 365',
+      category: 'Productivity',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow sharing with family/group members via official Microsoft invitations.',
+    },
+    {
+      name: 'Apple One',
+      category: 'Storage',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow Apple Family Sharing invitations.',
+    },
+    {
+      name: 'Xbox',
+      category: 'Gaming',
+      sharing_policy_note:
+        'Only list a plan whose current terms expressly allow sharing with the intended members. Use the provider’s official invitation flow.',
+    },
+    {
+      name: 'NordVPN',
+      category: 'Security',
+      sharing_policy_note:
+        'Only list a multi-user plan whose terms allow seat invitations. Never share primary account passwords.',
+    },
+    {
+      name: 'Notion',
+      category: 'Productivity',
+      sharing_policy_note:
+        'Only list workspace plans that officially support adding members via workspace invitation.',
+    },
+  ];
 
 // Kept as a compatible server-side shape for API responses. Credentials and
 // profile data are owned by Supabase Auth and Postgres, never a local file.
@@ -92,7 +92,7 @@ export function toPublicUser(user: StoredUser): User {
 export function isSupabaseConfigured(): boolean {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
   );
 }
 

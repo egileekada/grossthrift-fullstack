@@ -218,7 +218,7 @@ export async function recordPaystackRefundEvent(event: string, data: Record<stri
 
   const status = event === 'refund.processed' ? 'refunded'
     : event === 'refund.failed' || event === 'refund.needs-attention' ? 'refund_due'
-    : 'refund_pending';
+      : 'refund_pending';
   const admin = createAdminClient();
   const { error } = await admin.from('payments')
     .update({ status, updated_at: new Date().toISOString() })

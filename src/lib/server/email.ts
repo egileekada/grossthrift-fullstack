@@ -38,11 +38,10 @@ export async function sendTransactionalEmailWithResult(
       <p style="font-size: 14px; line-height: 1.6; color: #4b5563; margin: 0 0 24px;">
         ${input.body}
       </p>
-      ${
-        input.ctaLabel && input.ctaUrl
-          ? `<a href="${input.ctaUrl}" style="display: inline-block; background: #115c3e; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 12px 20px; border-radius: 10px;">${input.ctaLabel}</a>`
-          : ''
-      }
+      ${input.ctaLabel && input.ctaUrl
+      ? `<a href="${input.ctaUrl}" style="display: inline-block; background: #115c3e; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600; padding: 12px 20px; border-radius: 10px;">${input.ctaLabel}</a>`
+      : ''
+    }
       <hr style="border: 0; border-top: 1px solid #e4e9e5; margin: 28px 0 16px;" />
       <p style="font-size: 11px; color: #9ca3af; margin: 0;">
         GrossThrift never asks for or stores shared account passwords. Always use the service provider’s official invitation flow.

@@ -156,3 +156,7 @@ create policy "profiles_update_own"
   to authenticated
   using (id = (select auth.uid()))
   with check (id = (select auth.uid()));
+<<<<<<< HEAD
+=======
+
+>>>>>>> 441c7eb49a7347bc854f13bcde662323c4e7f77a

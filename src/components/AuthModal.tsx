@@ -444,11 +444,10 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                         setEmailMode('login');
                         setError('');
                       }}
-                      className={`px-2.5 py-1 rounded-md cursor-pointer ${
-                        emailMode === 'login'
+                      className={`px-2.5 py-1 rounded-md cursor-pointer ${emailMode === 'login'
                           ? 'bg-charcoal text-white dark:text-[#141c17]'
                           : 'text-slate'
-                      }`}
+                        }`}
                     >
                       Sign In
                     </button>
@@ -458,11 +457,10 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                         setEmailMode('signup');
                         setError('');
                       }}
-                      className={`px-2.5 py-1 rounded-md cursor-pointer ${
-                        emailMode === 'signup'
+                      className={`px-2.5 py-1 rounded-md cursor-pointer ${emailMode === 'signup'
                           ? 'bg-charcoal text-white dark:text-[#141c17]'
                           : 'text-slate'
-                      }`}
+                        }`}
                     >
                       Sign Up
                     </button>
@@ -530,6 +528,12 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                           : 'Resend confirmation email'}
                       </button>
                     )}
+                  </div>
+                )}
+
+                {successNotice && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold font-sans">
+                    {successNotice}
                   </div>
                 )}
 
@@ -872,11 +876,10 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                                     setFieldValue('country', c.name);
                                     setFieldValue('countryFlag', c.flag);
                                   }}
-                                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all cursor-pointer ${
-                                    isSelected
+                                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all cursor-pointer ${isSelected
                                       ? 'border-ink bg-surface font-semibold shadow-xs'
                                       : 'border-border bg-white hover:bg-surface/60 text-slate'
-                                  }`}
+                                    }`}
                                 >
                                   <span className="text-base leading-none">{c.flag}</span>
                                   <span className="text-[11px] text-ink truncate leading-tight">
@@ -906,19 +909,17 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                                 setFieldValue('vettingMethod', 'linkedin');
                                 setFieldValue('vettingDetail', '');
                               }}
-                              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                values.vettingMethod === 'linkedin'
+                              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${values.vettingMethod === 'linkedin'
                                   ? 'border-ink bg-surface shadow-xs'
                                   : 'border-border bg-white hover:bg-surface/50'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-start gap-3">
                                 <div
-                                  className={`p-2 rounded-lg shrink-0 ${
-                                    values.vettingMethod === 'linkedin'
+                                  className={`p-2 rounded-lg shrink-0 ${values.vettingMethod === 'linkedin'
                                       ? 'bg-sky-50 text-sky-600'
                                       : 'bg-surface text-slate'
-                                  }`}
+                                    }`}
                                 >
                                   <svg
                                     width="16"
@@ -952,19 +953,17 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                                 setFieldValue('vettingMethod', 'email');
                                 setFieldValue('vettingDetail', '');
                               }}
-                              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                values.vettingMethod === 'email'
+                              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${values.vettingMethod === 'email'
                                   ? 'border-ink bg-surface shadow-xs'
                                   : 'border-border bg-white hover:bg-surface/50'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-start gap-3">
                                 <div
-                                  className={`p-2 rounded-lg shrink-0 ${
-                                    values.vettingMethod === 'email'
+                                  className={`p-2 rounded-lg shrink-0 ${values.vettingMethod === 'email'
                                       ? 'bg-red-50 text-red-600'
                                       : 'bg-surface text-slate'
-                                  }`}
+                                    }`}
                                 >
                                   <Mail size={16} />
                                 </div>
@@ -985,19 +984,17 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
                                 setFieldValue('vettingMethod', 'declaration');
                                 setFieldValue('vettingDetail', 'Self-Attested Declaration');
                               }}
-                              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                values.vettingMethod === 'declaration'
+                              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${values.vettingMethod === 'declaration'
                                   ? 'border-ink bg-surface shadow-xs'
                                   : 'border-border bg-white hover:bg-surface/50'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-start gap-3">
                                 <div
-                                  className={`p-2 rounded-lg shrink-0 ${
-                                    values.vettingMethod === 'declaration'
+                                  className={`p-2 rounded-lg shrink-0 ${values.vettingMethod === 'declaration'
                                       ? 'bg-amber-50 text-amber-600'
                                       : 'bg-surface text-slate'
-                                  }`}
+                                    }`}
                                 >
                                   <UserCheck size={16} />
                                 </div>

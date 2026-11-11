@@ -429,11 +429,10 @@ export default function CreateListingPage() {
                         <div
                           key={plan.name}
                           onClick={() => setSelectedPlan(plan.name)}
-                          className={`border rounded-xl p-[14px_16px] cursor-pointer transition-all duration-150 relative flex items-center gap-3 ${
-                            isSelected
+                          className={`border rounded-xl p-[14px_16px] cursor-pointer transition-all duration-150 relative flex items-center gap-3 ${isSelected
                               ? 'border-ink bg-surface shadow-gt-card'
                               : 'border-border bg-white hover:bg-surface'
-                          }`}
+                            }`}
                         >
                           <div className="w-[44px] h-[44px] bg-surface dark:bg-dark-bg border border-border/40 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
                             <PlanIcon name={plan.name} size={22} />
@@ -449,11 +448,10 @@ export default function CreateListingPage() {
                     {/* Other / Custom Card */}
                     <div
                       onClick={() => setSelectedPlan('Other')}
-                      className={`border rounded-xl p-[14px_16px] cursor-pointer transition-all duration-150 relative flex items-center gap-3 ${
-                        selectedPlan === 'Other'
+                      className={`border rounded-xl p-[14px_16px] cursor-pointer transition-all duration-150 relative flex items-center gap-3 ${selectedPlan === 'Other'
                           ? 'border-ink bg-surface shadow-gt-card'
                           : 'border-border bg-white hover:bg-surface'
-                      }`}
+                        }`}
                     >
                       <div className="w-[44px] h-[44px] bg-surface dark:bg-dark-bg border border-border/40 rounded-xl flex items-center justify-center shrink-0 text-dust shadow-sm">
                         <Plus size={20} />
@@ -490,11 +488,10 @@ export default function CreateListingPage() {
                           key={cat}
                           onClick={() => selectedPlan === 'Other' && setCategory(cat as Category)}
                           disabled={selectedPlan !== 'Other'}
-                          className={`h-[32px] px-4 rounded-full text-[13px] font-medium transition-all duration-150 border cursor-pointer ${
-                            category === cat
+                          className={`h-[32px] px-4 rounded-full text-[13px] font-medium transition-all duration-150 border cursor-pointer ${category === cat
                               ? 'bg-ink text-white dark:text-[#141c17] border-ink'
                               : 'bg-transparent text-slate border-border hover:bg-surface disabled:opacity-50'
-                          }`}
+                            }`}
                         >
                           {cat}
                         </button>
@@ -568,22 +565,20 @@ export default function CreateListingPage() {
                       <button
                         type="button"
                         onClick={() => setBillingCycle('monthly')}
-                        className={`h-[44px] rounded-xl text-[13px] font-semibold border transition-all cursor-pointer ${
-                          billingCycle === 'monthly'
+                        className={`h-[44px] rounded-xl text-[13px] font-semibold border transition-all cursor-pointer ${billingCycle === 'monthly'
                             ? 'border-ink bg-surface text-ink shadow-xs'
                             : 'border-border bg-white text-slate hover:bg-surface'
-                        }`}
+                          }`}
                       >
                         Monthly
                       </button>
                       <button
                         type="button"
                         onClick={() => setBillingCycle('yearly')}
-                        className={`h-[44px] rounded-xl text-[13px] font-semibold border transition-all cursor-pointer ${
-                          billingCycle === 'yearly'
+                        className={`h-[44px] rounded-xl text-[13px] font-semibold border transition-all cursor-pointer ${billingCycle === 'yearly'
                             ? 'border-ink bg-surface text-ink shadow-xs'
                             : 'border-border bg-white text-slate hover:bg-surface'
-                        }`}
+                          }`}
                       >
                         Yearly
                       </button>
@@ -680,11 +675,10 @@ export default function CreateListingPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div
                         onClick={() => setVisibility('public')}
-                        className={`border rounded-xl p-4 cursor-pointer transition-all duration-150 flex items-start gap-3 ${
-                          visibility === 'public'
+                        className={`border rounded-xl p-4 cursor-pointer transition-all duration-150 flex items-start gap-3 ${visibility === 'public'
                             ? 'border-ink bg-surface shadow-gt-card'
                             : 'border-border bg-white hover:bg-surface'
-                        }`}
+                          }`}
                       >
                         <div className="w-9 h-9 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center shrink-0 border border-emerald-100 mt-0.5">
                           <Globe size={18} />
@@ -699,11 +693,10 @@ export default function CreateListingPage() {
 
                       <div
                         onClick={() => setVisibility('private')}
-                        className={`border rounded-xl p-4 cursor-pointer transition-all duration-150 flex items-start gap-3 ${
-                          visibility === 'private'
+                        className={`border rounded-xl p-4 cursor-pointer transition-all duration-150 flex items-start gap-3 ${visibility === 'private'
                             ? 'border-ink bg-surface shadow-gt-card'
                             : 'border-border bg-white hover:bg-surface'
-                        }`}
+                          }`}
                       >
                         <div className="w-9 h-9 bg-amber-50 text-amber-700 rounded-xl flex items-center justify-center shrink-0 border border-amber-100 mt-0.5">
                           <Lock size={18} />
