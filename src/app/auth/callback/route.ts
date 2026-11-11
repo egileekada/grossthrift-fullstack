@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
+import { getRequestOrigin } from '@/lib/server/siteUrl'
 import { createClient } from '@/lib/supabase/server'
 
 const ALLOWED_OTP_TYPES = new Set<EmailOtpType>([
@@ -13,6 +14,7 @@ const ALLOWED_OTP_TYPES = new Set<EmailOtpType>([
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
+  const redirectOrigin = getRequestOrigin(request)
   const code = requestUrl.searchParams.get('code')
   const tokenHash = requestUrl.searchParams.get('token_hash')
   const typeParam = requestUrl.searchParams.get('type') as EmailOtpType | null
@@ -32,7 +34,7 @@ export async function GET(request: Request) {
         error: userError,
       } = await supabase.auth.getUser()
       if (!userError && user?.email_confirmed_at) {
-        return NextResponse.redirect(new URL(next, requestUrl.origin))
+        return NextResponse.redirect(new URL(next, redirectOrigin))
       }
       await supabase.auth.signOut()
     }
@@ -47,13 +49,13 @@ export async function GET(request: Request) {
         error: userError,
       } = await supabase.auth.getUser()
       if (!userError && user?.email_confirmed_at) {
-        return NextResponse.redirect(new URL(next, requestUrl.origin))
+        return NextResponse.redirect(new URL(next, redirectOrigin))
       }
       await supabase.auth.signOut()
     }
   }
 
   return NextResponse.redirect(
-    new URL('/auth/login?auth_error=confirmation_failed', requestUrl.origin),
+    new URL('/auth/login?auth_error=confirmation_failed', redirectOrigin),
   )
 }

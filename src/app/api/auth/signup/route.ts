@@ -6,6 +6,7 @@ import {
   toPublicUser,
 } from '@/lib/server/db'
 import { sendTransactionalEmailWithResult } from '@/lib/server/email'
+import { buildAuthCallbackUrl, getSiteUrl } from '@/lib/server/siteUrl'
 import { createAdminClient } from '@/lib/server/supabaseAdmin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -18,23 +19,6 @@ function isConfirmationEmailError(message?: string): boolean {
     lower.includes('rate limit') ||
     lower.includes('smtp')
   )
-}
-
-function buildCallbackUrl(
-  origin: string,
-  hashedToken: string | undefined,
-  verificationType: string | undefined,
-  fallbackActionLink: string | undefined,
-  nextPath: string,
-): string {
-  if (hashedToken && verificationType) {
-    const url = new URL('/auth/callback', origin)
-    url.searchParams.set('token_hash', hashedToken)
-    url.searchParams.set('type', verificationType)
-    url.searchParams.set('next', nextPath)
-    return url.toString()
-  }
-  return fallbackActionLink || new URL(nextPath, origin).toString()
 }
 
 export async function POST(request: Request) {
@@ -71,7 +55,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Account signup is not configured yet.' }, { status: 503 })
   }
 
-  const origin = new URL(request.url).origin
+  const origin = getSiteUrl(request)
   const redirectTo = new URL('/auth/callback?next=/dashboard', origin).toString()
   const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`
   const userMetadata = {
@@ -149,13 +133,13 @@ export async function POST(request: Request) {
 
       if (!signupLinkRes.error && signupLinkRes.data?.user) {
         generatedUserId = signupLinkRes.data.user.id
-        confirmUrl = buildCallbackUrl(
+        confirmUrl = buildAuthCallbackUrl({
           origin,
-          signupLinkRes.data.properties?.hashed_token,
-          signupLinkRes.data.properties?.verification_type,
-          signupLinkRes.data.properties?.action_link,
-          '/dashboard',
-        )
+          hashedToken: signupLinkRes.data.properties?.hashed_token,
+          verificationType: signupLinkRes.data.properties?.verification_type,
+          fallbackActionLink: signupLinkRes.data.properties?.action_link,
+          nextPath: '/dashboard',
+        })
       } else {
         // Check if an unconfirmed user record already exists from an earlier signup attempt
         const { data: usersList } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
@@ -182,13 +166,13 @@ export async function POST(request: Request) {
 
           if (!magicLinkRes.error && magicLinkRes.data?.user) {
             generatedUserId = magicLinkRes.data.user.id
-            confirmUrl = buildCallbackUrl(
+            confirmUrl = buildAuthCallbackUrl({
               origin,
-              magicLinkRes.data.properties?.hashed_token,
-              magicLinkRes.data.properties?.verification_type,
-              magicLinkRes.data.properties?.action_link,
-              '/dashboard',
-            )
+              hashedToken: magicLinkRes.data.properties?.hashed_token,
+              verificationType: magicLinkRes.data.properties?.verification_type,
+              fallbackActionLink: magicLinkRes.data.properties?.action_link,
+              nextPath: '/dashboard',
+            })
           }
         }
       }

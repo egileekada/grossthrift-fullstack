@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { getSiteUrl } from '@/lib/server/siteUrl'
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET(
@@ -139,12 +140,12 @@ export async function POST(
     return NextResponse.json({ error: 'Unable to create invite link' }, { status: 500 })
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin
+  const baseUrl = getSiteUrl(request)
   return NextResponse.json(
     {
       data: {
         ...invite,
-        invite_url: `${baseUrl.replace(/\/$/, '')}/invite/${token}`,
+        invite_url: `${baseUrl}/invite/${token}`,
       },
     },
     { status: 201, headers: { 'Cache-Control': 'no-store' } },

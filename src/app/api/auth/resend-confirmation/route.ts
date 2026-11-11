@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/server/db';
 import { sendTransactionalEmailWithResult } from '@/lib/server/email';
+import { buildAuthCallbackUrl, getSiteUrl } from '@/lib/server/siteUrl';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
 
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = getSiteUrl(request);
   const redirectTo = new URL('/auth/callback?next=/dashboard', origin).toString();
   const supabase = createClient();
 
@@ -82,16 +83,13 @@ export async function POST(request: Request) {
         options: { redirectTo },
       });
 
-      const hashedToken = linkRes.data?.properties?.hashed_token;
-      const verificationType = linkRes.data?.properties?.verification_type || 'magiclink';
-      let confirmUrl = linkRes.data?.properties?.action_link || '';
-      if (hashedToken) {
-        const callbackUrl = new URL('/auth/callback', origin);
-        callbackUrl.searchParams.set('token_hash', hashedToken);
-        callbackUrl.searchParams.set('type', verificationType);
-        callbackUrl.searchParams.set('next', '/dashboard');
-        confirmUrl = callbackUrl.toString();
-      }
+      const confirmUrl = buildAuthCallbackUrl({
+        origin,
+        hashedToken: linkRes.data?.properties?.hashed_token,
+        verificationType: linkRes.data?.properties?.verification_type || 'magiclink',
+        fallbackActionLink: linkRes.data?.properties?.action_link,
+        nextPath: '/dashboard',
+      });
 
       if (confirmUrl) {
         const displayName =

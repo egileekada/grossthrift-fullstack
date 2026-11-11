@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/server/db';
 import { sendTransactionalEmailWithResult } from '@/lib/server/email';
+import { buildAuthCallbackUrl, getSiteUrl } from '@/lib/server/siteUrl';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
 
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Password reset is not configured yet.' }, { status: 503 });
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = getSiteUrl(request);
   const redirectTo = new URL('/auth/callback?next=/auth/reset-password', origin).toString();
   const supabase = createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
@@ -45,13 +46,13 @@ export async function POST(request: Request) {
           options: { redirectTo },
         });
         if (!linkRes.error && linkRes.data?.properties?.hashed_token) {
-          const resetUrl = new URL('/auth/callback', origin);
-          resetUrl.searchParams.set('token_hash', linkRes.data.properties.hashed_token);
-          resetUrl.searchParams.set(
-            'type',
-            linkRes.data.properties.verification_type || 'recovery'
-          );
-          resetUrl.searchParams.set('next', '/auth/reset-password');
+          const resetUrl = buildAuthCallbackUrl({
+            origin,
+            hashedToken: linkRes.data.properties.hashed_token,
+            verificationType: linkRes.data.properties.verification_type || 'recovery',
+            fallbackActionLink: linkRes.data.properties.action_link,
+            nextPath: '/auth/reset-password',
+          });
 
           const delivery = await sendTransactionalEmailWithResult({
             to: email,
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
             heading: 'Password Reset Request',
             body: 'Click the button below to choose a new password for your GrossThrift account.',
             ctaLabel: 'Reset Password',
-            ctaUrl: resetUrl.toString(),
+            ctaUrl: resetUrl,
           });
 
           if (delivery.ok) {
