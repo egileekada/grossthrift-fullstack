@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from '@/lib/server/db';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
 import { createInAppNotification, sendTransactionalEmail } from '@/lib/server/email';
+import { getSiteUrl } from '@/lib/server/siteUrl';
 
 export async function POST(
   _request: Request,
@@ -133,7 +134,7 @@ export async function POST(
             heading: `${authUser.name} confirmed access to ${listing.plan_type}`,
             body: `Great news! Your member confirmed access, and ₦${seatPrice.toFixed(2)} has been released from escrow into your Available Wallet Balance.`,
             ctaLabel: 'View Wallet & Withdraw',
-            ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://grossthrift-fullstack.vercel.app'}/dashboard`,
+            ctaUrl: `${getSiteUrl()}/dashboard?tab=wallet`,
           });
         }
       } catch {
