@@ -1,8 +1,10 @@
+import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/server/db';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
 import { createInAppNotification } from '@/lib/server/email';
+import { reportError, trackEvent } from '@/lib/server/telemetry';
 
 const ALLOWED_REASONS = new Set([
   'no_invite',
@@ -11,6 +13,55 @@ const ALLOWED_REASONS = new Set([
   'wrong_plan',
   'other',
 ]);
+
+const EVIDENCE_BUCKET = 'dispute-evidence';
+const MAX_EVIDENCE_FILES = 3;
+const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024;
+
+async function uploadEvidenceImages(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  membershipId: string,
+  rawFiles: unknown
+): Promise<string[]> {
+  if (!Array.isArray(rawFiles) || rawFiles.length === 0) return [];
+
+  try {
+    await admin.storage.createBucket(EVIDENCE_BUCKET, { public: false });
+  } catch {
+    // Bucket already exists
+  }
+
+  const urls: string[] = [];
+  for (const item of rawFiles.slice(0, MAX_EVIDENCE_FILES)) {
+    if (typeof item !== 'object' || item === null) continue;
+    const dataUrl = typeof (item as { dataUrl?: unknown }).dataUrl === 'string'
+      ? (item as { dataUrl: string }).dataUrl
+      : '';
+    const match = /^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+    if (!match) continue;
+
+    const mimeType = match[1] === 'image/jpg' ? 'image/jpeg' : match[1];
+    const ext = mimeType.split('/')[1] || 'png';
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.byteLength === 0 || buffer.byteLength > MAX_EVIDENCE_BYTES) continue;
+
+    const path = `${userId}/${membershipId}/${crypto.randomUUID()}.${ext}`;
+    const { error: uploadErr } = await admin.storage
+      .from(EVIDENCE_BUCKET)
+      .upload(path, buffer, { contentType: mimeType, upsert: false });
+
+    if (!uploadErr) {
+      const { data: signed } = await admin.storage
+        .from(EVIDENCE_BUCKET)
+        .createSignedUrl(path, 60 * 60 * 24 * 7);
+      if (signed?.signedUrl) {
+        urls.push(signed.signedUrl);
+      }
+    }
+  }
+  return urls;
+}
 
 export async function POST(request: Request) {
   const authUser = await getAuthenticatedUser();
@@ -70,6 +121,20 @@ export async function POST(request: Request) {
     .update({ status: 'disputed', updated_at: new Date().toISOString() })
     .eq('id', membership.id);
 
+  let evidenceUrls: string[] = [];
+  if (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      evidenceUrls = await uploadEvidenceImages(
+        createAdminClient(),
+        authUser.id,
+        membership.id,
+        body.evidenceFiles
+      );
+    } catch (err) {
+      reportError('disputes.evidence_upload', err, { membershipId: membership.id });
+    }
+  }
+
   let createdDispute: Record<string, unknown> | null = null;
   try {
     const { data } = await client
@@ -80,6 +145,7 @@ export async function POST(request: Request) {
         opened_by: authUser.id,
         reason,
         description,
+        ...(evidenceUrls.length ? { evidence_urls: evidenceUrls } : {}),
         status: 'open',
       })
       .select('*')
@@ -92,9 +158,17 @@ export async function POST(request: Request) {
       listing_id: membership.listing_id,
       reason,
       description,
+      evidence_urls: evidenceUrls,
       status: 'open',
     };
   }
+
+  trackEvent('dispute.opened', {
+    membershipId: membership.id,
+    listingId: membership.listing_id,
+    reason,
+    evidenceCount: evidenceUrls.length,
+  });
 
   if (listing?.host_id) {
     await createInAppNotification({

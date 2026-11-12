@@ -28,6 +28,7 @@ export function useLoginMutation() {
   return useMutation<LoginResponse, Error, LoginPayload>({
     mutationFn: (payload) => authApi.login(payload),
     onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['listings'] });
     },
@@ -46,6 +47,7 @@ export function useVerifyPhoneOtpMutation() {
   return useMutation<LoginResponse, Error, PhoneOtpVerifyPayload>({
     mutationFn: (payload) => authApi.verifyPhoneOtp(payload),
     onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['listings'] });
     },
@@ -58,6 +60,7 @@ export function useSignupMutation() {
   return useMutation<SignupResponse, Error, SignupPayload>({
     mutationFn: (payload) => authApi.signup(payload),
     onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['listings'] });
     },
@@ -154,11 +157,11 @@ export function useJoinListingMutation() {
   });
 }
 
-export function useDashboardQuery(enabled = true) {
+export function useDashboardQuery(userId?: string | null) {
   return useQuery({
-    queryKey: ['dashboard'],
+    queryKey: ['dashboard', userId ?? null],
     queryFn: () => prdApi.getDashboard(),
-    enabled,
+    enabled: Boolean(userId),
   });
 }
 
@@ -255,8 +258,12 @@ export function useRequestPayoutMutation() {
 export function useOpenDisputeMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { membershipId: string; reason: string; description: string }) =>
-      prdApi.openDispute(payload),
+    mutationFn: (payload: {
+      membershipId: string;
+      reason: string;
+      description: string;
+      evidenceFiles?: Array<{ name: string; dataUrl: string }>;
+    }) => prdApi.openDispute(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },

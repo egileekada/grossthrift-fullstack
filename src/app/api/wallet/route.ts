@@ -3,6 +3,34 @@ import { getAuthenticatedUser } from '@/lib/server/db';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
 import { createInAppNotification } from '@/lib/server/email';
+import {
+  createPaystackTransferRecipient,
+  getPaystackSecret,
+  listPaystackNigerianBanks,
+  resolvePaystackBankAccount,
+} from '@/lib/server/paystack';
+
+export async function GET(request: Request) {
+  const authUser = await getAuthenticatedUser();
+  if (!authUser) {
+    return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
+  }
+
+  const wantBanks = new URL(request.url).searchParams.get('banks') === '1';
+  if (wantBanks) {
+    if (!getPaystackSecret()) {
+      return NextResponse.json({ banks: [] });
+    }
+    try {
+      const banks = await listPaystackNigerianBanks();
+      return NextResponse.json({ banks });
+    } catch {
+      return NextResponse.json({ banks: [] });
+    }
+  }
+
+  return NextResponse.json({ ok: true });
+}
 
 export async function PATCH(request: Request) {
   const authUser = await getAuthenticatedUser();
@@ -18,14 +46,48 @@ export async function PATCH(request: Request) {
   }
 
   const bankName = typeof body.bankName === 'string' ? body.bankName.trim() : '';
+  const requestedBankCode = typeof body.bankCode === 'string' ? body.bankCode.trim() : '';
   const accountNumber = typeof body.accountNumber === 'string' ? body.accountNumber.trim() : '';
-  const accountName = typeof body.accountName === 'string' ? body.accountName.trim() : '';
+  const providedAccountName = typeof body.accountName === 'string' ? body.accountName.trim() : '';
 
-  if (!bankName || !/^\d{10}$/.test(accountNumber) || !accountName) {
+  if (!bankName || !/^\d{10}$/.test(accountNumber) || !providedAccountName) {
     return NextResponse.json(
       { error: 'Provide a valid Nigerian bank name, 10-digit NUBAN account number, and account name.' },
       { status: 400 }
     );
+  }
+
+  let resolvedAccountName = providedAccountName;
+  let resolvedBankCode = requestedBankCode;
+  let bankVerified = false;
+  let recipientCode: string | null = null;
+
+  if (getPaystackSecret()) {
+    try {
+      if (!resolvedBankCode) {
+        const banks = await listPaystackNigerianBanks();
+        const lowerBank = bankName.toLowerCase();
+        const match = banks.find(
+          (b) => b.name.toLowerCase() === lowerBank || b.name.toLowerCase().includes(lowerBank)
+        );
+        if (match) resolvedBankCode = match.code;
+      }
+
+      if (resolvedBankCode) {
+        const resolved = await resolvePaystackBankAccount(accountNumber, resolvedBankCode);
+        resolvedAccountName = resolved.account_name;
+        bankVerified = true;
+
+        const recipient = await createPaystackTransferRecipient({
+          name: resolvedAccountName,
+          accountNumber,
+          bankCode: resolvedBankCode,
+        });
+        recipientCode = recipient.recipient_code;
+      }
+    } catch (verifyErr) {
+      console.warn('Paystack bank verification fallback:', verifyErr);
+    }
   }
 
   const client =
@@ -39,7 +101,10 @@ export async function PATCH(request: Request) {
         user_id: authUser.id,
         bank_name: bankName,
         account_number: accountNumber,
-        account_name: accountName,
+        account_name: resolvedAccountName,
+        ...(resolvedBankCode ? { bank_code: resolvedBankCode } : {}),
+        bank_verified: bankVerified,
+        ...(recipientCode ? { provider_recipient_code: recipientCode } : {}),
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' }
@@ -56,8 +121,11 @@ export async function PATCH(request: Request) {
         data: {
           ...authData.user.user_metadata,
           bank_name: bankName,
+          bank_code: resolvedBankCode || null,
+          bank_verified: bankVerified,
+          paystack_recipient_code: recipientCode,
           account_number: accountNumber,
-          account_name: accountName,
+          account_name: resolvedAccountName,
         },
       });
     }
@@ -66,8 +134,17 @@ export async function PATCH(request: Request) {
   }
 
   return NextResponse.json({
-    message: 'Bank payout details saved.',
-    data: { bankName, accountNumber, accountName },
+    message: bankVerified
+      ? `Bank payout details verified via Paystack (${resolvedAccountName}).`
+      : 'Bank payout details saved.',
+    data: {
+      bankName,
+      bankCode: resolvedBankCode || null,
+      accountNumber,
+      accountName: resolvedAccountName,
+      verified: bankVerified,
+      recipientCode,
+    },
   });
 }
 

@@ -446,6 +446,7 @@ export const prdApi = {
     membershipId: string;
     reason: string;
     description: string;
+    evidenceFiles?: Array<{ name: string; dataUrl: string }>;
   }) => httpService.post<{ message: string }>('/disputes', payload),
 
   submitRating: (payload: {

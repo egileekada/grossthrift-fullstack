@@ -1,7 +1,7 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import React, { useMemo, useState, Suspense } from 'react';
+import React, { useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Formik, Form } from 'formik';
@@ -75,7 +75,7 @@ const disputeSchema = Yup.object({
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const paymentQueryStatus = searchParams?.get('payment');
+  const paymentParam = searchParams?.get('payment');
 
   const {
     user,
@@ -93,7 +93,7 @@ function DashboardContent() {
     refreshListings,
   } = useApp();
 
-  const dashboardQuery = useDashboardQuery(Boolean(user));
+  const dashboardQuery = useDashboardQuery(user?.id);
   const markInvitedMutation = useMarkInvitedMutation();
   const confirmAccessMutation = useConfirmAccessMutation();
   const leaveSplitMutation = useLeaveSplitMutation();
@@ -105,6 +105,7 @@ function DashboardContent() {
   const submitRatingMutation = useSubmitRatingMutation();
 
   const [activeTab, setActiveTab] = useState<TabType>('joined');
+  const [paymentBannerStatus, setPaymentBannerStatus] = useState<string | null>(paymentParam);
   const [actionMessage, setActionMessage] = useState<string>('');
   const [actionError, setActionError] = useState<string>('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -117,6 +118,32 @@ function DashboardContent() {
     membershipId: string;
     planName: string;
   } | null>(null);
+  const [disputeEvidence, setDisputeEvidence] = useState<Array<{ name: string; dataUrl: string }>>([]);
+
+  const prevUserIdRef = useRef<string | undefined>(user?.id);
+
+  // Strip ?payment=... from the URL once captured so it does not persist across user switches
+  useEffect(() => {
+    if (paymentParam) {
+      setPaymentBannerStatus(paymentParam);
+      router.replace('/dashboard', { scroll: false });
+    }
+  }, [paymentParam, router]);
+
+  // Reset transient dashboard state/banners only when the active user actually changes
+  useEffect(() => {
+    if (prevUserIdRef.current !== user?.id) {
+      prevUserIdRef.current = user?.id;
+      setActionMessage('');
+      setActionError('');
+      setPaymentBannerStatus(null);
+      setExpandedCredentials({});
+      setExpandedSlots({});
+      setGeneratedInviteUrls({});
+      setDisputeTarget(null);
+      setDisputeEvidence([]);
+    }
+  }, [user?.id]);
 
   const dashboardData = dashboardQuery.data;
 
@@ -324,12 +351,12 @@ function DashboardContent() {
 
       <div className="max-w-[1120px] mx-auto px-6 py-12 space-y-8 text-left">
         {/* Paystack Callback Banner */}
-        {paymentQueryStatus && (
+        {paymentBannerStatus && (
           <div
             className={`p-4 rounded-2xl border flex items-center justify-between gap-3 text-xs font-semibold ${
-              paymentQueryStatus === 'success'
+              paymentBannerStatus === 'success'
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : paymentQueryStatus === 'failed' || paymentQueryStatus === 'invalid'
+                : paymentBannerStatus === 'failed' || paymentBannerStatus === 'invalid'
                   ? 'bg-rose-50 border-rose-200 text-rose-800'
                   : 'bg-amber-50 border-amber-200 text-amber-900'
             }`}
@@ -337,15 +364,23 @@ function DashboardContent() {
             <div className="flex items-center gap-2.5">
               <CheckCircle2 size={17} className="shrink-0" />
               <span>
-                {paymentQueryStatus === 'success'
+                {paymentBannerStatus === 'success'
                   ? 'Payment confirmed and held in escrow! Your host has 24 hours to send your official provider invitation. Once you receive it, click "I Have Access" below.'
-                  : paymentQueryStatus === 'failed'
+                  : paymentBannerStatus === 'failed'
                     ? 'Your Paystack payment did not complete and the reserved seat was released.'
-                    : paymentQueryStatus === 'refund'
+                    : paymentBannerStatus === 'refund'
                       ? 'Your payment is queued for an automatic refund.'
                       : 'Your seat reservation is awaiting payment confirmation.'}
               </span>
             </div>
+            <button
+              type="button"
+              onClick={() => setPaymentBannerStatus(null)}
+              className="font-bold opacity-70 hover:opacity-100 shrink-0"
+              aria-label="Dismiss payment notice"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -1413,8 +1448,10 @@ function DashboardContent() {
                       membershipId: disputeTarget.membershipId,
                       reason: values.reason,
                       description: values.description,
+                      evidenceFiles: disputeEvidence.length ? disputeEvidence : undefined,
                     });
                     setActionMessage(res.message);
+                    setDisputeEvidence([]);
                     setDisputeTarget(null);
                   } catch (err) {
                     setActionError(
@@ -1446,12 +1483,51 @@ function DashboardContent() {
                       placeholder="Include details so Trust & Safety can verify and issue your refund or resolution."
                     />
 
+                    <div>
+                      <label className="block text-xs font-semibold text-charcoal mb-1.5">
+                        Screenshot Evidence (optional, up to 3 PNG/JPG/WEBP images)
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        multiple
+                        onChange={async (e) => {
+                          const files = Array.from(e.target.files ?? []).slice(0, 3);
+                          const encoded = await Promise.all(
+                            files.map(
+                              (file) =>
+                                new Promise<{ name: string; dataUrl: string }>((resolve) => {
+                                  const reader = new FileReader();
+                                  reader.onload = () =>
+                                    resolve({
+                                      name: file.name,
+                                      dataUrl: typeof reader.result === 'string' ? reader.result : '',
+                                    });
+                                  reader.readAsDataURL(file);
+                                })
+                            )
+                          );
+                          setDisputeEvidence(encoded.filter((f) => f.dataUrl));
+                        }}
+                        className="block w-full text-xs text-slate file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-sage-light file:text-sage hover:file:bg-sage/15 cursor-pointer"
+                      />
+                      {disputeEvidence.length > 0 && (
+                        <p className="text-[11px] text-sage mt-1">
+                          {disputeEvidence.length} screenshot(s) attached:{' '}
+                          {disputeEvidence.map((f) => f.name).join(', ')}
+                        </p>
+                      )}
+                    </div>
+
                     <div className="flex gap-3 pt-2">
                       <AppButton
                         type="button"
                         variant="secondary-outline"
                         fullWidth
-                        onPress={() => setDisputeTarget(null)}
+                        onPress={() => {
+                          setDisputeEvidence([]);
+                          setDisputeTarget(null);
+                        }}
                       >
                         Cancel
                       </AppButton>

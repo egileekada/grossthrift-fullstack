@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { User, Listing, JoinRequest, AppNotification, CreateListingInput } from '@/types/listing';
 import {
   fetchListingsFromApi,
@@ -41,6 +42,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUserState] = useState<User | null>(null);
   const [listings, setListings] = useState<Listing[]>([]);
   const [joinedListingIds, setJoinedListingIds] = useState<string[]>([]);
@@ -106,7 +108,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refreshListings]);
 
   const setUser = (newUser: User | null) => {
-    setUserState(newUser);
+    setUserState((prev) => {
+      if (prev?.id !== newUser?.id) {
+        queryClient.removeQueries({ queryKey: ['dashboard'] });
+        queryClient.removeQueries({ queryKey: ['profile'] });
+        setJoinedListingIds([]);
+        saveStoredJoinedIds([]);
+        setJoinRequests([]);
+        saveStoredJoinRequests([]);
+        setNotifications([]);
+        saveStoredNotifications([]);
+      }
+      return newUser;
+    });
     saveStoredUser(newUser);
     refreshListings();
   };
@@ -121,6 +135,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn('Logout API call failed:', e);
     }
+    queryClient.clear();
     setUserState(null);
     saveStoredUser(null);
     setJoinedListingIds([]);

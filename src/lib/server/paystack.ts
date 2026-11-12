@@ -81,15 +81,65 @@ export async function verifyPaystackTransaction(reference: string) {
   return response.data;
 }
 
-async function requestFullRefund(reference: string) {
+async function requestFullRefund(reference: string, note?: string) {
   return paystackRequest<{ id: number | string; status: string }>('/refund', {
     method: 'POST',
     body: JSON.stringify({
       transaction: reference,
-      customer_note: 'The seat reservation expired before payment completed.',
+      customer_note: note || 'The seat reservation expired before payment completed.',
       merchant_note: `GrossThrift automatic refund for ${reference}`,
     }),
   });
+}
+
+export async function refundPaystackPayment(reference: string, reason?: string) {
+  return requestFullRefund(reference, reason);
+}
+
+export interface PaystackBank {
+  name: string;
+  code: string;
+  active?: boolean;
+}
+
+export async function listPaystackNigerianBanks(): Promise<PaystackBank[]> {
+  const response = await paystackRequest<PaystackBank[]>('/bank?country=nigeria&perPage=200');
+  return (response.data ?? []).filter((b) => b.active !== false);
+}
+
+export async function resolvePaystackBankAccount(accountNumber: string, bankCode: string) {
+  const qs = new URLSearchParams({
+    account_number: accountNumber,
+    bank_code: bankCode,
+  });
+  const response = await paystackRequest<{ account_number: string; account_name: string }>(
+    `/bank/resolve?${qs.toString()}`
+  );
+  if (!response.data?.account_name) {
+    throw new Error('Could not resolve bank account name.');
+  }
+  return response.data;
+}
+
+export async function createPaystackTransferRecipient(input: {
+  name: string;
+  accountNumber: string;
+  bankCode: string;
+}) {
+  const response = await paystackRequest<{ recipient_code: string }>('/transferrecipient', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'nuban',
+      name: input.name,
+      account_number: input.accountNumber,
+      bank_code: input.bankCode,
+      currency: 'NGN',
+    }),
+  });
+  if (!response.data?.recipient_code) {
+    throw new Error('Paystack did not return a transfer recipient code.');
+  }
+  return response.data;
 }
 
 export async function reconcilePaystackReference(reference: string) {
