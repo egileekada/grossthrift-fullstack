@@ -76,6 +76,7 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const paymentParam = searchParams?.get('payment');
+  const tabParam = searchParams?.get('tab');
 
   const {
     user,
@@ -104,7 +105,11 @@ function DashboardContent() {
   const openDisputeMutation = useOpenDisputeMutation();
   const submitRatingMutation = useSubmitRatingMutation();
 
-  const [activeTab, setActiveTab] = useState<TabType>('joined');
+  const [activeTab, setActiveTab] = useState<TabType>(
+    tabParam === 'hosted' || tabParam === 'wallet'
+      ? tabParam
+      : 'joined'
+  );
   const [paymentBannerStatus, setPaymentBannerStatus] = useState<string | null>(paymentParam);
   const [actionMessage, setActionMessage] = useState<string>('');
   const [actionError, setActionError] = useState<string>('');
@@ -129,6 +134,12 @@ function DashboardContent() {
       router.replace('/dashboard', { scroll: false });
     }
   }, [paymentParam, router]);
+
+  useEffect(() => {
+    if (tabParam === 'hosted' || tabParam === 'wallet' || tabParam === 'joined') {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   // Reset transient dashboard state/banners only when the active user actually changes
   useEffect(() => {
