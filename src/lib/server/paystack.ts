@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createInAppNotification, sendTransactionalEmail } from '@/lib/server/email';
+import { getSiteUrl } from '@/lib/server/siteUrl';
 
 type PaystackEnvelope<T> = { status: boolean; message?: string; data?: T };
 
@@ -215,7 +216,7 @@ export async function reconcilePaystackReference(reference: string) {
               heading: 'A member just paid for a seat in your split!',
               body: `₦${seatAmountNaira.toFixed(2)} is now held safely in escrow. Please send their official provider invitation within 24 hours and click "Mark Official Invite Sent" in your Host Dashboard.`,
               ctaLabel: 'Open Host Dashboard',
-              ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://grossthrift-fullstack.vercel.app'}/dashboard`,
+              ctaUrl: `${getSiteUrl()}/dashboard?tab=hosted`,
             });
           }
         } catch {

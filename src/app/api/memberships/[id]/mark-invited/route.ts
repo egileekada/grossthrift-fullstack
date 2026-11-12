@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from '@/lib/server/db';
 import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
 import { createInAppNotification, sendTransactionalEmail } from '@/lib/server/email';
+import { getSiteUrl } from '@/lib/server/siteUrl';
 
 export async function POST(
   _request: Request,
@@ -83,7 +84,7 @@ export async function POST(
           heading: `${authUser.name} has sent your official invitation!`,
           body: `Your host has sent the official provider invitation for ${listing.plan_type}. Please accept the invitation in your account and click "I Have Access" on your GrossThrift dashboard within 48 hours (or report a problem if the invite did not work).`,
           ctaLabel: 'Confirm Access on Dashboard',
-          ctaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://grossthrift-fullstack.vercel.app'}/dashboard`,
+          ctaUrl: `${getSiteUrl()}/dashboard?tab=joined`,
         });
       }
     } catch {
