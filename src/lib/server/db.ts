@@ -252,8 +252,16 @@ export async function getAuthenticatedUser(): Promise<StoredUser | null> {
       `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
     const createdAt = user.created_at || new Date().toISOString();
 
-    if (!profile) {
-      await ensureUserProfile({ id: user.id, name, avatar });
+    if (!profile && user.email_confirmed_at) {
+      await ensureUserProfile({
+        id: user.id,
+        name,
+        avatar,
+        phone:
+          typeof metadata.phone === 'string' && metadata.phone.trim()
+            ? metadata.phone.trim()
+            : undefined,
+      });
     }
 
     return {
@@ -282,7 +290,7 @@ export async function getAuthenticatedUser(): Promise<StoredUser | null> {
         typeof metadata.verification_detail === 'string'
           ? metadata.verification_detail
           : undefined,
-      isVetted: typeof metadata.is_vetted === 'boolean' ? metadata.is_vetted : false,
+      isVetted: metadata.is_vetted === true || metadata.onboarding_completed === true,
       passwordHash: '',
       createdAt,
     };

@@ -118,6 +118,17 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
     }
   }, [method]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setMethod('email');
+      setEmailMode('login');
+      setOnboardingStep(1);
+      setTempUser(null);
+      setError('');
+      setSuccessNotice('');
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleGoogleLogin = () => {
@@ -161,9 +172,14 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         countryFlag: onboardingDraft.countryFlag,
       });
       if (res.user) {
-        setTempUser(res.user);
-        setMethod('onboarding');
-        setOnboardingStep(1);
+        if (res.user.isVetted) {
+          onLoginSuccess(res.user);
+          onClose();
+        } else {
+          setTempUser(res.user);
+          setMethod('onboarding');
+          setOnboardingStep(1);
+        }
       } else if (res.needsEmailVerification || res.message) {
         setSuccessNotice(
           res.message || 'Check your email for the confirmation link before signing in.'
@@ -214,9 +230,14 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         phone,
         otp: values.otp.trim(),
       });
-      setTempUser(res.user);
-      setMethod('onboarding');
-      setOnboardingStep(1);
+      if (res.user.isVetted) {
+        onLoginSuccess(res.user);
+        onClose();
+      } else {
+        setTempUser(res.user);
+        setMethod('onboarding');
+        setOnboardingStep(1);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid verification code.');
     }
@@ -251,8 +272,9 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         ? 'Self-Attested Declaration'
         : onboardingDraft.vettingDetail || '';
 
+    let savedUser: User | undefined;
     try {
-      await onboardingMutation.mutateAsync({
+      const res = await onboardingMutation.mutateAsync({
         display_name: tempUser.name,
         phone: tempUser.phone,
         country: onboardingDraft.country,
@@ -261,12 +283,18 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         verification_detail: finalVerificationDetail,
         is_vetted: true,
       });
+      savedUser = res.user;
     } catch (e) {
-      console.warn('Onboarding profile sync fallback:', e);
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Could not save your onboarding verification. Please try again.'
+      );
+      return;
     }
 
     const finalUser: User = {
-      ...tempUser,
+      ...(savedUser ?? tempUser),
       country: onboardingDraft.country,
       countryFlag: onboardingDraft.countryFlag,
       verificationMethod: onboardingDraft.vettingMethod as 'linkedin' | 'email' | 'declaration',

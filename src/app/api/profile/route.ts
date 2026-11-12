@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser, toPublicUser } from '@/lib/server/db';
+import { createAdminClient } from '@/lib/server/supabaseAdmin';
 import { createClient } from '@/lib/supabase/server';
 
 const allowedFields = new Set([
@@ -11,6 +12,7 @@ const allowedFields = new Set([
   'country_flag',
   'verification_method',
   'verification_detail',
+  'is_vetted',
 ]);
 
 export async function GET() {
@@ -46,7 +48,7 @@ export async function GET() {
         typeof metadata.verification_method === 'string' ? metadata.verification_method : null,
       verificationDetail:
         typeof metadata.verification_detail === 'string' ? metadata.verification_detail : null,
-      isVetted: typeof metadata.is_vetted === 'boolean' ? metadata.is_vetted : false,
+      isVetted: metadata.is_vetted === true || metadata.onboarding_completed === true,
     },
   }, { headers: { 'Cache-Control': 'no-store' } });
 }
@@ -82,6 +84,16 @@ export async function PATCH(request: Request) {
   for (const key of ['phone', 'country', 'country_flag', 'verification_method', 'verification_detail'] as const) {
     if (key in body) metadataPatch[key] = body[key];
   }
+  if ('is_vetted' in body) {
+    if (typeof body.is_vetted !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid verification status.' }, { status: 400 });
+    }
+    metadataPatch.is_vetted = body.is_vetted;
+    if (body.is_vetted) {
+      metadataPatch.onboarding_completed = true;
+      metadataPatch.pledge_accepted_at = new Date().toISOString();
+    }
+  }
 
   const profilePatch: Record<string, unknown> = {};
   if (typeof body.display_name === 'string') {
@@ -105,24 +117,62 @@ export async function PATCH(request: Request) {
     profilePatch.bio = value || null;
   }
 
-  if (Object.keys(profilePatch).length) {
-    const { error } = await supabase.from('profiles').upsert(
-      { id: user.id, ...profilePatch },
-      { onConflict: 'id' },
-    );
-    if (error) {
-      console.error('PATCH /api/profile profile update failed:', error.message);
-      return NextResponse.json({ error: 'Could not save your public profile.' }, { status: 500 });
+  if (Object.keys(metadataPatch).length) {
+    const nextMetadata = { ...authData.user.user_metadata, ...metadataPatch };
+    const { error: metaError } = await supabase.auth.updateUser({
+      data: nextMetadata,
+    });
+    if (metaError) {
+      let savedViaAdmin = false;
+      if (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const admin = createAdminClient();
+        const { error: adminMetaErr } = await admin.auth.admin.updateUserById(user.id, {
+          user_metadata: nextMetadata,
+        });
+        savedViaAdmin = !adminMetaErr;
+      }
+      if (!savedViaAdmin) {
+        console.error('PATCH /api/profile metadata update failed:', metaError.message);
+        return NextResponse.json({ error: 'Could not save your account details.' }, { status: 500 });
+      }
     }
   }
 
-  if (Object.keys(metadataPatch).length) {
-    const { error } = await supabase.auth.updateUser({
-      data: { ...authData.user.user_metadata, ...metadataPatch },
-    });
-    if (error) {
-      console.error('PATCH /api/profile metadata update failed:', error.message);
-      return NextResponse.json({ error: 'Could not save your account details.' }, { status: 500 });
+  if (Object.keys(profilePatch).length) {
+    const hasServiceRole = Boolean(
+      process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+    const clients = [supabase, ...(hasServiceRole ? [createAdminClient()] : [])];
+    let profileSaved = false;
+    let lastProfileError = '';
+
+    for (const client of clients) {
+      const { data: updatedRows, error: updateErr } = await client
+        .from('profiles')
+        .update(profilePatch)
+        .eq('id', user.id)
+        .select('id');
+
+      if (!updateErr && updatedRows && updatedRows.length > 0) {
+        profileSaved = true;
+        break;
+      }
+
+      const { error: upsertErr } = await client.from('profiles').upsert(
+        { id: user.id, ...profilePatch },
+        { onConflict: 'id' },
+      );
+
+      if (!upsertErr) {
+        profileSaved = true;
+        break;
+      }
+      lastProfileError = upsertErr.message || updateErr?.message || '';
+    }
+
+    if (!profileSaved) {
+      console.error('PATCH /api/profile profile update failed:', lastProfileError);
+      return NextResponse.json({ error: 'Could not save your public profile.' }, { status: 500 });
     }
   }
 
@@ -135,7 +185,11 @@ export async function PATCH(request: Request) {
       countryFlag: metadataPatch.country_flag ?? user.countryFlag,
       verificationMethod: metadataPatch.verification_method ?? user.verificationMethod,
       verificationDetail: metadataPatch.verification_detail ?? user.verificationDetail,
-      isVetted: user.isVetted ?? false,
+      isVetted:
+        updatedUser?.isVetted ??
+        (typeof metadataPatch.is_vetted === 'boolean'
+          ? metadataPatch.is_vetted
+          : user.isVetted ?? false),
     },
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

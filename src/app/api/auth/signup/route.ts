@@ -21,6 +21,32 @@ function isConfirmationEmailError(message?: string): boolean {
   )
 }
 
+function isDuplicateEmailError(message?: string): boolean {
+  if (!message) return false
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('already registered') ||
+    lower.includes('already exists') ||
+    lower.includes('duplicate') ||
+    lower.includes('email_exists')
+  )
+}
+
+async function findAuthUserByEmail(
+  admin: ReturnType<typeof createAdminClient>,
+  email: string,
+) {
+  const perPage = 200
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage })
+    if (error || !data?.users?.length) return null
+    const match = data.users.find((u) => u.email?.toLowerCase() === email)
+    if (match) return match
+    if (data.users.length < perPage) return null
+  }
+  return null
+}
+
 export async function POST(request: Request) {
   let body: unknown
   try {
@@ -67,6 +93,26 @@ export async function POST(request: Request) {
     avatar_url: avatarUrl,
   }
 
+  const hasServiceRole = Boolean(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
+  if (hasServiceRole) {
+    try {
+      const admin = createAdminClient()
+      const existing = await findAuthUserByEmail(admin, email)
+      if (existing) {
+        return NextResponse.json(
+          {
+            error: existing.email_confirmed_at
+              ? 'An account with this email already exists. Please sign in instead.'
+              : 'An account with this email already exists and is awaiting confirmation. Please check your inbox or resend the confirmation email.',
+          },
+          { status: 409 },
+        )
+      }
+    } catch (lookupErr) {
+      console.warn('Signup duplicate email check warning:', lookupErr)
+    }
+  }
+
   const supabase = createClient()
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -79,14 +125,25 @@ export async function POST(request: Request) {
 
   // Primary path succeeded cleanly
   if (!error && data.user) {
-    await ensureUserProfile({
-      id: data.user.id,
-      name,
-      avatar: avatarUrl,
-      phone: phone ?? undefined,
-    })
+    // Supabase returns a user with empty identities when an email already exists.
+    if (!data.user.identities || data.user.identities.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            'An account with this email already exists. Please sign in or resend your confirmation email.',
+        },
+        { status: 409 },
+      )
+    }
 
-    if (data.session) {
+    if (data.session && data.user.email_confirmed_at) {
+      await ensureUserProfile({
+        id: data.user.id,
+        name,
+        avatar: avatarUrl,
+        phone: phone ?? undefined,
+      })
+
       const user = await getAuthenticatedUser()
       if (user) {
         return NextResponse.json(
@@ -111,15 +168,18 @@ export async function POST(request: Request) {
     )
   }
 
+  if (error && isDuplicateEmailError(error.message)) {
+    return NextResponse.json(
+      { error: 'An account with this email already exists. Please sign in instead.' },
+      { status: 409 },
+    )
+  }
+
   // Fallback path when Supabase built-in SMTP fails ("Error sending confirmation email" or rate limit):
   // Generate a signed Supabase confirmation link with Admin API and deliver it via Resend.
-  const hasServiceRole = Boolean(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
   if (error && isConfirmationEmailError(error.message) && hasServiceRole) {
     try {
       const admin = createAdminClient()
-
-      let generatedUserId: string | undefined
-      let confirmUrl = ''
 
       const signupLinkRes = await admin.auth.admin.generateLink({
         type: 'signup',
@@ -131,58 +191,21 @@ export async function POST(request: Request) {
         },
       })
 
+      if (signupLinkRes.error && isDuplicateEmailError(signupLinkRes.error.message)) {
+        return NextResponse.json(
+          { error: 'An account with this email already exists. Please sign in instead.' },
+          { status: 409 },
+        )
+      }
+
       if (!signupLinkRes.error && signupLinkRes.data?.user) {
-        generatedUserId = signupLinkRes.data.user.id
-        confirmUrl = buildAuthCallbackUrl({
+        const generatedUserId = signupLinkRes.data.user.id
+        const confirmUrl = buildAuthCallbackUrl({
           origin,
           hashedToken: signupLinkRes.data.properties?.hashed_token,
           verificationType: signupLinkRes.data.properties?.verification_type,
           fallbackActionLink: signupLinkRes.data.properties?.action_link,
           nextPath: '/dashboard',
-        })
-      } else {
-        // Check if an unconfirmed user record already exists from an earlier signup attempt
-        const { data: usersList } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
-        const existing = usersList?.users?.find((u) => u.email?.toLowerCase() === email)
-
-        if (existing) {
-          if (existing.email_confirmed_at) {
-            return NextResponse.json(
-              { error: 'An account with this email already exists. Please sign in instead.' },
-              { status: 400 },
-            )
-          }
-
-          await admin.auth.admin.updateUserById(existing.id, {
-            password,
-            user_metadata: userMetadata,
-          })
-
-          const magicLinkRes = await admin.auth.admin.generateLink({
-            type: 'magiclink',
-            email,
-            options: { redirectTo },
-          })
-
-          if (!magicLinkRes.error && magicLinkRes.data?.user) {
-            generatedUserId = magicLinkRes.data.user.id
-            confirmUrl = buildAuthCallbackUrl({
-              origin,
-              hashedToken: magicLinkRes.data.properties?.hashed_token,
-              verificationType: magicLinkRes.data.properties?.verification_type,
-              fallbackActionLink: magicLinkRes.data.properties?.action_link,
-              nextPath: '/dashboard',
-            })
-          }
-        }
-      }
-
-      if (generatedUserId && confirmUrl) {
-        await ensureUserProfile({
-          id: generatedUserId,
-          name,
-          avatar: avatarUrl,
-          phone: phone ?? undefined,
         })
 
         const emailDelivery = await sendTransactionalEmailWithResult({
@@ -205,6 +228,13 @@ export async function POST(request: Request) {
           )
         }
 
+        // Remove the newly created unverified auth user so failed delivery does not lock the email.
+        try {
+          await admin.auth.admin.deleteUser(generatedUserId)
+        } catch (cleanupErr) {
+          console.warn('Failed to clean up unverified user after email error:', cleanupErr)
+        }
+
         if (process.env.NODE_ENV !== 'production') {
           console.info(`[DEV Signup Confirmation Link for ${email}]: ${confirmUrl}`)
         }
@@ -213,8 +243,8 @@ export async function POST(request: Request) {
           {
             error:
               emailDelivery.error?.includes('only send testing emails')
-                ? 'Your account was created, but Resend sandbox mode only delivers to your own Resend account email until a custom domain is verified (set RESEND_FROM_EMAIL) or custom SMTP is configured in Supabase Auth.'
-                : `Account created, but confirmation email could not be delivered: ${emailDelivery.error || 'Email delivery failed.'}`,
+                ? 'Resend sandbox mode only delivers to your own Resend account email until a custom domain is verified (set RESEND_FROM_EMAIL) or custom SMTP is configured in Supabase Auth.'
+                : `Confirmation email could not be delivered: ${emailDelivery.error || 'Email delivery failed.'}`,
           },
           { status: 502 },
         )
