@@ -364,13 +364,12 @@ function DashboardContent() {
         {/* Paystack Callback Banner */}
         {paymentBannerStatus && (
           <div
-            className={`p-4 rounded-2xl border flex items-center justify-between gap-3 text-xs font-semibold ${
-              paymentBannerStatus === 'success'
+            className={`p-4 rounded-2xl border flex items-center justify-between gap-3 text-xs font-semibold ${paymentBannerStatus === 'success'
                 ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                 : paymentBannerStatus === 'failed' || paymentBannerStatus === 'invalid'
                   ? 'bg-rose-50 border-rose-200 text-rose-800'
                   : 'bg-amber-50 border-amber-200 text-amber-900'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2.5">
               <CheckCircle2 size={17} className="shrink-0" />
@@ -505,9 +504,8 @@ function DashboardContent() {
           <div className="flex items-center overflow-x-auto border-b border-border" id="dashboard-tabs">
             <button
               onClick={() => setActiveTab('joined')}
-              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${
-                activeTab === 'joined' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
-              }`}
+              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${activeTab === 'joined' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
+                }`}
             >
               <span>Joined splits</span>
               <span className="ml-1.5 px-2 py-0.5 bg-surface text-slate text-[11px] rounded-full font-bold">
@@ -520,9 +518,8 @@ function DashboardContent() {
 
             <button
               onClick={() => setActiveTab('hosted')}
-              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${
-                activeTab === 'hosted' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
-              }`}
+              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${activeTab === 'hosted' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
+                }`}
             >
               <span>Listed splits</span>
               <span className="ml-1.5 px-2 py-0.5 bg-surface text-slate text-[11px] rounded-full font-bold">
@@ -535,9 +532,8 @@ function DashboardContent() {
 
             <button
               onClick={() => setActiveTab('requests')}
-              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${
-                activeTab === 'requests' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
-              }`}
+              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 ${activeTab === 'requests' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
+                }`}
             >
               <span>Member Invites &amp; Handshakes</span>
               {pendingHostActionCount > 0 ? (
@@ -556,9 +552,8 @@ function DashboardContent() {
 
             <button
               onClick={() => setActiveTab('wallet')}
-              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 flex items-center gap-1.5 ${
-                activeTab === 'wallet' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
-              }`}
+              className={`py-3.5 px-5 text-[13.5px] font-medium transition-all duration-150 cursor-pointer relative shrink-0 flex items-center gap-1.5 ${activeTab === 'wallet' ? 'text-ink font-semibold' : 'text-slate hover:text-ink'
+                }`}
             >
               <Wallet size={14} />
               <span>Wallet &amp; Payouts</span>
@@ -633,15 +628,14 @@ function DashboardContent() {
                                 <span className="font-medium text-ink">Host: {listing.hostName}</span>
                               </div>
                               <span
-                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                  mStatus === 'active'
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${mStatus === 'active'
                                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                     : mStatus === 'invited'
                                       ? 'bg-sky-100 text-sky-800 border border-sky-200'
                                       : mStatus === 'disputed'
                                         ? 'bg-rose-100 text-rose-800 border border-rose-200'
                                         : 'bg-amber-100 text-amber-800 border border-amber-200'
-                                }`}
+                                  }`}
                               >
                                 {mStatus === 'active'
                                   ? '✓ Active Access'
@@ -868,11 +862,10 @@ function DashboardContent() {
                                       {listing.planName}
                                     </h3>
                                     <span
-                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                                        listing.visibility === 'private'
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${listing.visibility === 'private'
                                           ? 'bg-amber-100 text-amber-800'
                                           : 'bg-emerald-50 text-emerald-700'
-                                      }`}
+                                        }`}
                                     >
                                       {listing.visibility === 'private' ? 'Private' : 'Public'}
                                     </span>
